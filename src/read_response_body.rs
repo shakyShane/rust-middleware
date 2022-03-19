@@ -3,15 +3,19 @@ use std::{
     pin::Pin,
 };
 
-use actix_web::body::{BoxBody, MessageBody};
-use actix_web::{dev::{self, Service, ServiceRequest, ServiceResponse, Transform}, Error, HttpResponse};
-use actix_web::http::header::ContentRangeSpec::Bytes;
-use actix_web::http::header::HeaderName;
-use futures_util::StreamExt;
+use actix_web::{
+    body::{to_bytes, BoxBody},
+    dev::{self, Service, ServiceRequest, ServiceResponse, Transform},
+    http::StatusCode,
+    web, Error, HttpResponse,
+};
+use actix_web::http::header::{HeaderName, HeaderValue};
 
-pub struct Logging;
+use crate::resp_mod::{process_buffered_body, RespModData, RespModDataTrait};
 
-impl<S: 'static> Transform<S, ServiceRequest> for Logging
+pub struct RespMod;
+
+impl<S: 'static> Transform<S, ServiceRequest> for RespMod
 where
     S: Service<ServiceRequest, Response = ServiceResponse, Error = Error> + 'static,
 {
@@ -43,21 +47,65 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let _uri = req.uri().clone();
         let srv_v = self.service.call(req);
+
         Box::pin(async move {
             let s = srv_v.await;
             let res: ServiceResponse = s.unwrap();
-            let should_mod = true;
-            if !should_mod {
-                return Ok(res)
+            let req = res.request().clone();
+            let uri_string = req.uri().to_string();
+            let response = res.response();
+
+            let req_head = req.head();
+            let res_head = response.head();
+
+            //
+            // These are the transformed registered in config
+            //
+            let resp_mod_data_opt = req
+                .app_data::<web::Data<RespModData>>()
+                .map(|x| x.get_ref());
+
+            if resp_mod_data_opt.is_none() {
+                log::debug!("no transforms found, at all");
+                return Ok(res);
             }
-            Ok(res.map_body(|h, b| {
-                let mut out_bytes = bytes::BytesMut::new();
-                let bytes = b.try_into_bytes().unwrap();
-                out_bytes.extend("BEFORE".as_bytes());
-                out_bytes.extend(bytes);
-                out_bytes.extend("AFTER".as_bytes());
-                BoxBody::new(out_bytes)
-            }))
+
+            //
+            // 'indexes' are the transforms that should be applied to the body.
+            // eg: if 'indexes' is [0, 1] -> this means 2 transforms will be applied to this response
+            //
+            let indexes: Vec<usize> = resp_mod_data_opt
+                .map(|resp_mod_data| resp_mod_data.get_transform_indexes(req_head, res_head))
+                .unwrap_or_else(Vec::new);
+
+            log::debug!("indexes to process = {:?}", indexes);
+
+            //
+            // Early return if no-one wants to edit this response
+            //
+            if indexes.is_empty() {
+                log::trace!("returning early - nothing to process");
+                return Ok(res);
+            }
+
+            //
+            // Create a clone of the headers early
+            //
+            let mut new_header_map = response.headers().clone();
+            let hn = HeaderName::from_static("x-browser-sync");
+            let hv = HeaderValue::from_static("3.0");
+            new_header_map.append(hn, hv);
+
+            // let original_headers = response.headers().clone();
+            let bytes = to_bytes(res.into_body()).await?;
+            let out_bytes = process_buffered_body(bytes, uri_string, resp_mod_data_opt, &indexes)?;
+
+            let next_body = BoxBody::new(out_bytes);
+            let mut res = HttpResponse::with_body(StatusCode::OK, next_body);
+            (*res.headers_mut()) = new_header_map;
+
+
+            Ok(ServiceResponse::new(req, res))
         })
     }
 }
