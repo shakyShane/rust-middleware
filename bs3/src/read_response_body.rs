@@ -3,6 +3,7 @@ use std::{
     pin::Pin,
 };
 
+use crate::BrowserSyncMsg;
 use actix_web::http::header::{HeaderName, HeaderValue};
 use actix_web::{
     body::{to_bytes, BoxBody},
@@ -68,6 +69,20 @@ where
             if resp_mod_data_opt.is_none() {
                 log::debug!("no transforms found, at all");
                 return Ok(res);
+            }
+
+            //
+            // Access the channel that is used to communicate back to
+            // the parent process
+            //
+            let channel = req
+                .app_data::<web::Data<tokio::sync::mpsc::Sender<BrowserSyncMsg>>>()
+                .map(|x| x.get_ref());
+
+            if let Some(channel) = channel {
+                channel
+                    .try_send(BrowserSyncMsg::ScriptInjection)
+                    .expect("example");
             }
 
             //
