@@ -1,5 +1,5 @@
 use actix_files::Files;
-use actix_web::{web, App, HttpServer, HttpResponse};
+use actix_web::{web, App, HttpServer};
 
 use crate::client::script::Script;
 
@@ -43,14 +43,14 @@ async fn main() -> std::io::Result<()> {
                 //         }))
                 //     }
                 // })
-                .service(Files::new("/__bs3/client-js", "./client-js"))
+                .service(Files::new("/__bs3/client-js", "./bs3/client-js"))
                 // .service(web::resource("/__bs3/client/index.js").to(|| async {
                 //     // HttpResponse::Ok()
                 //     //     .content_type("application/javascript")
                 //     //     .body(include_str!("../client-js/client.js"))
                 //     Files::new("")
                 // }))
-                .service(Files::new("/", "./fixtures").index_file("index.html"))
+                .service(Files::new("/", "./bs3/fixtures").index_file("index.html"))
                 .service(web::resource("/login").to(|| async {
                     "You are on /login. Go to src/redirect.rs to change this behavior."
                 }))

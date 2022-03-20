@@ -3,13 +3,13 @@ use std::{
     pin::Pin,
 };
 
+use actix_web::http::header::{HeaderName, HeaderValue};
 use actix_web::{
     body::{to_bytes, BoxBody},
     dev::{self, Service, ServiceRequest, ServiceResponse, Transform},
     http::StatusCode,
     web, Error, HttpResponse,
 };
-use actix_web::http::header::{HeaderName, HeaderValue};
 
 use crate::resp_mod::{process_buffered_body, RespModData, RespModDataTrait};
 
@@ -103,7 +103,6 @@ where
             let next_body = BoxBody::new(out_bytes);
             let mut res = HttpResponse::with_body(StatusCode::OK, next_body);
             (*res.headers_mut()) = new_header_map;
-
 
             Ok(ServiceResponse::new(req, res))
         })
