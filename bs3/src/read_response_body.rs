@@ -3,7 +3,6 @@ use std::{
     pin::Pin,
 };
 
-use crate::BrowserSyncMsg;
 use actix_web::http::header::{HeaderName, HeaderValue};
 use actix_web::{
     body::{to_bytes, BoxBody},

@@ -17,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
     actix_rt::spawn(async move {
-        match bs3_lib::start(sender).await {
+        match bs3_lib::create_server(sender).await {
             Ok(_) => {
                 done_sender.send(()).unwrap();
             }

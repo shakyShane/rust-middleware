@@ -5,6 +5,7 @@
   "main": "index.node",
   "scripts": {
     "build": "rm -rf index.node && cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
+    "build2": "rm -rf index.node && cargo build --message-format=json-render-diagnostics",
     "build-debug": "npm run build --",
     "build-release": "npm run build -- --release",
     "install": "npm run build-release",
