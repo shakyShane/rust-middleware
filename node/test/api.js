@@ -5,4 +5,8 @@ const callback = (type) => {
 }
 
 const output = r.hello(callback);
-console.log(output);
+console.log("-", output);
+
+const output2 = r.init(callback).then(res => {
+    console.log('hello!', res);
+});

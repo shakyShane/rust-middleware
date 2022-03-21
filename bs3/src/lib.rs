@@ -1,10 +1,11 @@
 use crate::client::script::Script;
 use crate::resp_mod::RespModData;
 use actix_files::Files;
-use actix_web::web::Data;
+use actix_web::web::{block, Data};
 use actix_web::{web, App, HttpServer};
 use futures::channel::oneshot;
 use tokio::sync::mpsc::Sender;
+use crate::oneshot::{Canceled, Receiver};
 
 mod client;
 mod read_request_body;
@@ -67,8 +68,10 @@ pub async fn start(sender: Sender<BrowserSyncMsg>) -> anyhow::Result<()> {
         sender
             .try_send(BrowserSyncMsg::Listening { port: 8090 })
             .unwrap();
+        let addr = ("127.0.0.1", 8080);
+        log::debug!("Trying to bind at {:?}", addr);
         let binding = server
-            .bind(("127.0.0.1", 8080))
+            .bind(addr)
             .unwrap()
             .run()
             .await
@@ -88,4 +91,25 @@ pub async fn start(sender: Sender<BrowserSyncMsg>) -> anyhow::Result<()> {
     stop_msg_receiver
         .await
         .map_err(|e| anyhow::anyhow!("{:?}", e))
+}
+
+pub fn exec(_sender: Sender<BrowserSyncMsg>) {
+    let (sender, mut rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
+    let server = start(sender);
+    actix_web::rt::System::new().block_on(server);
+    // actix_web::rt::System::new().block_on(async {
+    //     let server = start(sender);
+    //
+    // });
+    // tokio::spawn(|| async move {
+    //     let server = start(sender);
+    //     match server.await.await {
+    //         Ok(_) => {
+    //             println!("erm");
+    //         }
+    //         Err(_) => {
+    //             println!("bad!")
+    //         }
+    //     };
+    // });
 }

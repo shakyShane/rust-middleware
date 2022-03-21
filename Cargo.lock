@@ -386,8 +386,11 @@ dependencies = [
 name = "cpu-count"
 version = "0.1.0"
 dependencies = [
+ "actix-web",
  "bs3",
  "neon",
+ "once_cell",
+ "tokio",
 ]
 
 [[package]]
@@ -1266,6 +1269,7 @@ dependencies = [
  "libc",
  "memchr",
  "mio",
+ "num_cpus",
  "once_cell",
  "parking_lot",
  "pin-project-lite",
