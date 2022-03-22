@@ -30,13 +30,17 @@ pub fn create_server(sender: Sender<BrowserSyncMsg>) -> Server {
             .app_data(Data::new(mods))
             .app_data(Data::new(sender_c.clone()))
             .wrap(read_response_body::RespMod)
-            .service(Files::new("/__bs3/client-js", "../bs3/client-js"))
-            .service(Files::new("/", "../bs3/fixtures").index_file("index.html"))
+            .service(Files::new("/__bs3/client-js", "./bs3/client-js"))
+            .service(Files::new("/", "./bs3/fixtures").index_file("index.html"))
     });
 
     println!("trying to bind to {:?}", ("127.0.0.1", 8080));
     let addr = ("127.0.0.1", 8080);
-    server.bind(addr).unwrap().run()
+    server
+        .disable_signals()
+        .bind(addr)
+        .unwrap()
+        .run()
 
     // let (stop_msg_sender, stop_msg_receiver) = oneshot::channel::<()>();
     //

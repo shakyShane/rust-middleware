@@ -1,12 +1,34 @@
-const r = require("../index");
+const {fork} = require("child_process");
+const {join} = require("path");
 
-const callback = (type) => {
-    console.log(type, "<--")
-}
+const handle = fork(join(__dirname, "init.js"), {
+    stdio: "inherit"
+})
 
-const output2 = r.init(callback).then(res => {
-    console.log('all done=>', res);
-}).catch(e => {
-    console.error('error=>', e);
-});
-console.log('after...');
+handle.on('message', (message) => {
+    switch (message?.type) {
+        case "listening": {
+            console.log('is listening');
+            break;
+        }
+        default: {
+            console.error(`unimplemented handler`, message);
+        }
+    }
+})
+
+handle.on('disconnect', () => console.log('disconnect!'));
+handle.on('spawn', () => console.log('spawn!'));
+handle.on('error', (err) => console.error('err', err));
+
+handle.on('close', (code) => {
+    if (code && code !== 0) {
+        console.error("none-zero")
+        process.exit(code);
+    } else {
+        console.error("zero exit code")
+        process.exit()
+    }
+})
+
+process.on('SIGINT', () => console.log('SIGINT'))
