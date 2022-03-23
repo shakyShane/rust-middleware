@@ -3,7 +3,9 @@ use crate::resp_mod::RespModData;
 use actix_files::Files;
 use actix_web::dev::Server;
 use actix_web::web::Data;
-use actix_web::{App, HttpServer};
+use actix_web::{App, Handler, HttpServer};
+use actix_web::dev::{Service as _};
+use actix_web::http::header::{CACHE_CONTROL, CONTENT_TYPE, EXPIRES, HeaderValue, PRAGMA};
 
 use tokio::sync::mpsc::Sender;
 
@@ -30,6 +32,17 @@ pub fn create_server(sender: Sender<BrowserSyncMsg>) -> Server {
             .app_data(Data::new(mods))
             .app_data(Data::new(sender_c.clone()))
             .wrap(read_response_body::RespMod)
+            .wrap_fn(|req, srv| {
+                let fut = srv.call(req);
+                async {
+                    let mut res = fut.await?;
+                    let headers = res.headers_mut();
+                    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-cache, no-store, must-revalidate"));
+                    headers.insert(PRAGMA, HeaderValue::from_static("no-cache"));
+                    headers.insert(EXPIRES, HeaderValue::from_static("0"));;
+                    Ok(res)
+                }
+            })
             .service(Files::new("/__bs3/client-js", "./bs3/client-js"))
             .service(Files::new("/", "./bs3/fixtures").index_file("index.html"))
     });
