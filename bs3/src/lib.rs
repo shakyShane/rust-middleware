@@ -2,7 +2,7 @@ use crate::client::script::Script;
 use crate::resp_mod::RespModData;
 use actix_files::{Files, FilesService};
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use std::task::{Context, Poll};
@@ -35,27 +35,23 @@ pub enum BrowserSyncMsg {
 }
 
 async fn last_fallback() -> HttpResponse {
-    HttpResponse::Ok().body(format!("Hello !"))
+    HttpResponse::Ok().body("Hello!")
 }
 
 #[derive(Clone)]
 struct FilesWrap {
-    mount_path: String,
-    serve_from: PathBuf,
-    files: Files,
-    files2: Files,
+    ss: Vec<ServeStatic>,
 }
 
 struct FilesWrapServices {
-    files: Files,
-    files2: Files,
+    files: Vec<Files>,
     services: Vec<Result<FilesService, ()>>,
 }
 
 impl HttpServiceFactory for FilesWrap {
     fn register(self, config: &mut AppService) {
-        let d = ResourceDef::new(self.mount_path.clone());
-        config.register_service(d, None, self.clone(), None);
+        let d = ResourceDef::new("/");
+        config.register_service(d, None, self, None);
     }
 }
 
@@ -68,17 +64,17 @@ impl ServiceFactory<ServiceRequest> for FilesWrap {
     type Future = Pin<Box<dyn Future<Output = Result<Self::Service, ()>>>>;
 
     fn new_service(&self, _: Self::Config) -> Self::Future {
-        // ok().boxed_local()
-        let srv = self.files.new_service(());
-        let srv2 = self.files2.new_service(());
-        let f1 = self.files.clone();
-        let f2 = self.files2.clone();
+        let f1 = self.ss.clone();
         Box::pin(async move {
-            Ok(FilesWrapServices {
-                files: f1,
-                files2: f2,
-                services: vec![srv.await, srv2.await],
-            })
+            let mut files: Vec<Files> = vec![];
+            for f in &f1 {
+                files.push(Files::new(&f.mount_path, &f.serve_from).index_file(&f.index_file));
+            }
+            let mut services: Vec<Result<FilesService, ()>> = vec![];
+            for file in &files {
+                services.push(file.new_service(()).await)
+            }
+            Ok(FilesWrapServices { files, services })
         })
     }
 }
@@ -95,14 +91,11 @@ impl Service<ServiceRequest> for FilesWrapServices {
     }
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        // let srv_1 = self.files.new_service(());
-        // let (req, _) = req.into_parts();
-        // let resp = HttpResponse::NotFound().body("oops!");
-        // let srv_resp = ServiceResponse::new(req, resp);
-        // ready(Ok(srv_resp))
-        let h = self.services.get(1).expect("never empty at this position");
-        if let Ok(h) = h {
-            h.call(req)
+        let uri = req.uri();
+        dbg!(uri);
+        let matching_service = self.services.get(0).expect("never empty at this position");
+        if let Ok(srv) = matching_service {
+            srv.call(req)
         } else {
             Box::pin(async move {
                 // let f = h.await.expect("of course");
@@ -117,21 +110,68 @@ impl Service<ServiceRequest> for FilesWrapServices {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+struct ServeStatic {
+    mount_path: String,
+    serve_from: PathBuf,
+    index_file: String,
+}
+
+fn should_serve(ss: &ServeStatic, req: &ServiceRequest) -> bool {
+    req.uri()
+        .path_and_query()
+        .map(|pq| {
+            let matches = pq.path().starts_with(&ss.mount_path);
+            let exists = file_path(pq.path(), &ss.serve_from);
+            log::trace!(
+                "mount_path=[{}], dir=[{}], exists=[{:?}]",
+                ss.mount_path,
+                ss.serve_from.display(),
+                exists
+            );
+            matches && exists.is_some()
+        })
+        .unwrap_or(false)
+}
+
+fn file_path(path: &str, dir: &Path) -> Option<PathBuf> {
+    if let Ok(real_path) = path.parse::<PathBuf>() {
+        if let Ok(pb) = dir.join(&real_path).canonicalize() {
+            return Some(pb);
+        }
+    }
+    None
+}
+
 pub fn create_server(sender: Sender<BrowserSyncMsg>) -> Server {
-    let sender_c = sender.clone();
     let server = HttpServer::new(move || {
         let mods = RespModData {
             items: vec![Box::new(Script)],
         };
+
+        let ss = vec![
+            ServeStatic {
+                mount_path: "/".into(),
+                serve_from: "./bs3/fixtures".into(),
+                index_file: "index.html".into(),
+            },
+            ServeStatic {
+                mount_path: "/".into(),
+                serve_from: "./bs3/fixtures/alt".into(),
+                index_file: "index2.html".into(),
+            },
+        ];
+
         let fw = FilesWrap {
-            mount_path: "/".to_string(),
-            serve_from: PathBuf::from("./bs3/fixtures"),
-            files: Files::new("/", "./bs3/fixtures").index_file("index.html"),
-            files2: Files::new("/", "./bs3/fixtures/alt").index_file("index2.html"),
+            ss
+            // files: vec![
+            //     Files::new("/", "./bs3/fixtures").index_file("index.html"),
+            //     Files::new("/", "./bs3/fixtures/alt").index_file("index2.html"),
+            // ],
         };
         App::new()
             .app_data(Data::new(mods))
-            .app_data(Data::new(sender_c.clone()))
+            .app_data(Data::new(sender.clone()))
             .wrap(read_response_body::RespMod)
             .wrap_fn(|req, srv| {
                 let fut = srv.call(req);
