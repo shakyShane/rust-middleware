@@ -44,6 +44,7 @@ struct FilesWrap {
 }
 
 struct FilesWrapServices {
+    ss: Vec<ServeStatic>,
     files: Vec<Files>,
     services: Vec<Result<FilesService, ()>>,
 }
@@ -74,7 +75,11 @@ impl ServiceFactory<ServiceRequest> for FilesWrap {
             for file in &files {
                 services.push(file.new_service(()).await)
             }
-            Ok(FilesWrapServices { files, services })
+            Ok(FilesWrapServices {
+                files,
+                services,
+                ss: f1,
+            })
         })
     }
 }
@@ -91,11 +96,16 @@ impl Service<ServiceRequest> for FilesWrapServices {
     }
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        let uri = req.uri();
-        dbg!(uri);
-        let matching_service = self.services.get(0).expect("never empty at this position");
-        if let Ok(srv) = matching_service {
-            srv.call(req)
+        // let uri = req.uri();
+        let handler = self.ss.iter().position(|ss| ss.check_multi(&req));
+
+        if let Some(index) = handler {
+            let s = self.services.get(index);
+            if let Some(Ok(srv)) = s {
+                srv.call(req)
+            } else {
+                unreachable!()
+            }
         } else {
             Box::pin(async move {
                 // let f = h.await.expect("of course");
@@ -115,6 +125,17 @@ struct ServeStatic {
     mount_path: String,
     serve_from: PathBuf,
     index_file: String,
+}
+
+impl ServeStatic {
+    fn check_multi(&self, _req: &ServiceRequest) -> bool {
+        let should = should_serve(self, _req);
+        println!("should {}", should);
+        if self.index_file == "index2.html".to_string() {
+            return true
+        }
+        false
+    }
 }
 
 fn should_serve(ss: &ServeStatic, req: &ServiceRequest) -> bool {
