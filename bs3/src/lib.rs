@@ -12,20 +12,22 @@ use actix_web::dev::{
     ServiceResponse,
 };
 
-use actix_web::http::header::{HeaderValue, CACHE_CONTROL, EXPIRES, PRAGMA};
 use actix_web::web::Data;
-use actix_web::{App, Error, HttpResponse, HttpServer};
+use actix_web::{web, App, Error, HttpResponse, HttpServer};
 
 // use crate::multi::{Multi, MultiServiceFuture, MultiServiceTrait};
 
+use crate::options::Options;
 use tokio::sync::mpsc::Sender;
 
 mod client;
 mod multi;
+pub mod options;
 mod read_request_body;
 mod read_response_body;
 mod redirect;
 mod resp_mod;
+mod serve_static;
 mod simple;
 
 #[derive(Debug, Clone)]
@@ -96,7 +98,7 @@ impl Service<ServiceRequest> for FilesWrapServices {
     }
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        // let uri = req.uri();
+        let _uri = req.uri();
         let handler = self.ss.iter().position(|ss| ss.check_multi(&req));
 
         if let Some(index) = handler {
@@ -130,11 +132,7 @@ struct ServeStatic {
 impl ServeStatic {
     fn check_multi(&self, _req: &ServiceRequest) -> bool {
         let should = should_serve(self, _req);
-        println!("should {}", should);
-        if self.index_file == "index2.html".to_string() {
-            return true
-        }
-        false
+        should
     }
 }
 
@@ -150,6 +148,7 @@ fn should_serve(ss: &ServeStatic, req: &ServiceRequest) -> bool {
                 ss.serve_from.display(),
                 exists
             );
+            dbg!(&exists);
             matches && exists.is_some()
         })
         .unwrap_or(false)
@@ -164,66 +163,11 @@ fn file_path(path: &str, dir: &Path) -> Option<PathBuf> {
     None
 }
 
-pub fn create_server(sender: Sender<BrowserSyncMsg>) -> Server {
+pub fn create_server(opts: Options, sender: Sender<BrowserSyncMsg>) -> Server {
     let server = HttpServer::new(move || {
-        let mods = RespModData {
-            items: vec![Box::new(Script)],
-        };
-
-        let ss = vec![
-            ServeStatic {
-                mount_path: "/".into(),
-                serve_from: "./bs3/fixtures".into(),
-                index_file: "index.html".into(),
-            },
-            ServeStatic {
-                mount_path: "/".into(),
-                serve_from: "./bs3/fixtures/alt".into(),
-                index_file: "index2.html".into(),
-            },
-        ];
-
-        let fw = FilesWrap {
-            ss
-            // files: vec![
-            //     Files::new("/", "./bs3/fixtures").index_file("index.html"),
-            //     Files::new("/", "./bs3/fixtures/alt").index_file("index2.html"),
-            // ],
-        };
         App::new()
-            .app_data(Data::new(mods))
-            .app_data(Data::new(sender.clone()))
             .wrap(read_response_body::RespMod)
-            .wrap_fn(|req, srv| {
-                let fut = srv.call(req);
-                async {
-                    let mut res = fut.await?;
-                    let headers = res.headers_mut();
-                    headers.insert(
-                        CACHE_CONTROL,
-                        HeaderValue::from_static("no-cache, no-store, must-revalidate"),
-                    );
-                    headers.insert(PRAGMA, HeaderValue::from_static("no-cache"));
-                    headers.insert(EXPIRES, HeaderValue::from_static("0"));
-                    Ok(res)
-                }
-            })
-            .service(Files::new("/__bs3/client-js", "./bs3/client-js"))
-            // .service(Files::new("/", "./bs3/fixtures/alt").index_file("index2.html"))
-            // .service(actix_web::web::scope("").guard(MyGuard).service(
-            //     Files::new("/", "./bs3/fixtures").index_file("index.html")
-            // ))
-            // .service(actix_web::web::scope("").service(srv))
-            // .service(Files::new("/", "./bs3/fixtures")
-            //     .index_file("index.html")
-            // .service(
-            //     actix_web::web::resource("/").to(
-            //
-            //     )
-            // )
-            // .service(actix_web::web::scope("").service(Files::new("/", "./bs3/fixtures").index_file("index.html")))
-            .service(fw)
-        // .service(actix_web::web::resource("").to(last_fallback))
+            .configure(|cfg| config(cfg, &opts.clone(), sender.clone()))
     });
 
     println!("trying to bind to {:?}", ("127.0.0.1", 8080));
@@ -266,6 +210,46 @@ pub fn create_server(sender: Sender<BrowserSyncMsg>) -> Server {
     //     .map_err(|e| anyhow::anyhow!("{:?}", e))
 }
 
+// this function could be located in a different module
+fn config(cfg: &mut web::ServiceConfig, _opts: &Options, sender: Sender<BrowserSyncMsg>) {
+    let mods = RespModData {
+        items: vec![Box::new(Script)],
+    };
+
+    let ss = vec![
+        ServeStatic {
+            mount_path: "/".into(),
+            serve_from: "/Users/shaneosbourne/WebstormProjects/examples/middleware/middleware/bs3/fixtures".into(),
+            index_file: "index.html".into(),
+        },
+        ServeStatic {
+            mount_path: "/".into(),
+            serve_from: "/Users/shaneosbourne/WebstormProjects/examples/middleware/middleware/bs3/fixtures/alt".into(),
+            index_file: "index2.html".into(),
+        },
+    ];
+
+    let fw = FilesWrap { ss };
+    cfg.app_data(Data::new(mods));
+    cfg.app_data(Data::new(sender.clone()));
+    // cfg.wrap_fn(|req, srv| {
+    //     let fut = srv.call(req);
+    //     async {
+    //         let mut res = fut.await?;
+    //         let headers = res.headers_mut();
+    //         headers.insert(
+    //             CACHE_CONTROL,
+    //             HeaderValue::from_static("no-cache, no-store, must-revalidate"),
+    //         );
+    //         headers.insert(PRAGMA, HeaderValue::from_static("no-cache"));
+    //         headers.insert(EXPIRES, HeaderValue::from_static("0"));
+    //         Ok(res)
+    //     }
+    // });
+    cfg.service(fw);
+    cfg.service(Files::new("/__bs3/client-js", "./bs3/client-js"));
+}
+
 pub fn exec(_sender: Sender<BrowserSyncMsg>) {
     let (_sender, _rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
     // let server = start(sender);
@@ -285,4 +269,37 @@ pub fn exec(_sender: Sender<BrowserSyncMsg>) {
     //         }
     //     };
     // });
+}
+
+#[cfg(test)]
+mod tests {
+    use actix_web::{test, App};
+    
+
+    use super::*;
+
+    #[actix_web::test]
+    async fn test_index_get() {
+        // let dir1 = "fixtures";
+        // let dir2 = "fixtures/alt";
+        // let cwd = current_dir().expect("current_dir");
+        // let _joined1 = cwd.join(dir1);
+        // let _joined2 = cwd.join(dir2);
+
+        let (sender, _rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
+        let opts = Options::default();
+        let app = test::init_service(
+            App::new()
+                .wrap(read_response_body::RespMod)
+                .configure(|cfg| config(cfg, &opts, sender.clone())),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .uri("/")
+            .insert_header(("accept", "text/html"))
+            .to_request();
+        let bytes = test::call_and_read_body(&app, req).await;
+        let v = String::from_utf8(bytes.to_vec()).expect("to string");
+        assert!(v.contains("injected by Browsersync"));
+    }
 }

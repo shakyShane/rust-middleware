@@ -1,9 +1,13 @@
+
 use anyhow::anyhow;
+use bs3_lib::options::Options;
 use bs3_lib::BrowserSyncMsg;
+use clap::Parser;
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    let options = <Options as Parser>::parse();
 
     let (sender, mut rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
     let (done_sender, done_receiver) = tokio::sync::oneshot::channel::<()>();
@@ -17,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
     actix_rt::spawn(async move {
-        match bs3_lib::create_server(sender).await {
+        match bs3_lib::create_server(options.clone(), sender).await {
             Ok(_) => {
                 done_sender.send(()).unwrap();
             }

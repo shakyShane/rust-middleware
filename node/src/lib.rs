@@ -1,5 +1,6 @@
 use neon::prelude::*;
 
+use bs3_lib::options::Options;
 use bs3_lib::{create_server, BrowserSyncMsg};
 use once_cell::sync::OnceCell;
 use tokio::runtime::Runtime;
@@ -21,7 +22,8 @@ fn init(mut cx: FunctionContext) -> JsResult<JsPromise> {
         let (sender, _rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
 
         // hangs here
-        create_server(sender).await.unwrap();
+        let opts = Options::default();
+        create_server(opts, sender).await.unwrap();
 
         deferred.settle_with(&channel, move |mut cx| Ok(cx.string("done")));
     });
