@@ -18,6 +18,7 @@ use actix_web::{web, App, Error, HttpResponse, HttpServer};
 
 use crate::options::Options;
 use crate::path_buf::PathBufWrap;
+use crate::serve_static::ServeStaticConfig;
 use tokio::sync::mpsc::Sender;
 
 mod client;
@@ -38,18 +39,19 @@ pub enum BrowserSyncMsg {
 
 #[derive(Clone)]
 struct FilesWrap {
-    ss: Vec<ServeStatic>,
+    serve_static: Vec<ServeStatic>,
 }
 
 struct FilesWrapServices {
-    ss: Vec<ServeStatic>,
+    serve_static: Vec<ServeStatic>,
     files: Vec<Files>,
     services: Vec<Result<FilesService, ()>>,
 }
 
 impl HttpServiceFactory for FilesWrap {
     fn register(self, config: &mut AppService) {
-        let rdef = ResourceDef::prefix("");
+        let prefixes: Vec<&String> = self.serve_static.iter().map(|ss| &ss.mount_path).collect();
+        let rdef = ResourceDef::prefix(prefixes);
         config.register_service(rdef, None, self, None);
     }
 }
@@ -63,7 +65,7 @@ impl ServiceFactory<ServiceRequest> for FilesWrap {
     type Future = Pin<Box<dyn Future<Output = Result<Self::Service, ()>>>>;
 
     fn new_service(&self, _: Self::Config) -> Self::Future {
-        let f1 = self.ss.clone();
+        let f1 = self.serve_static.clone();
         Box::pin(async move {
             let mut files: Vec<Files> = vec![];
             for f in &f1 {
@@ -76,7 +78,7 @@ impl ServiceFactory<ServiceRequest> for FilesWrap {
             Ok(FilesWrapServices {
                 files,
                 services,
-                ss: f1,
+                serve_static: f1,
             })
         })
     }
@@ -93,11 +95,12 @@ impl Service<ServiceRequest> for FilesWrapServices {
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let _uri = req.uri();
-        let handler = self.ss.iter().position(|ss| ss.check_multi(&req));
+        let handler = self.serve_static.iter().position(|ss| ss.check_multi(&req));
 
         if let Some(index) = handler {
             let s = self.services.get(index);
             if let Some(Ok(srv)) = s {
+                println!("{}{}", req.uri(), index);
                 srv.call(req)
             } else {
                 unreachable!()
@@ -124,9 +127,23 @@ struct ServeStatic {
 }
 
 impl ServeStatic {
-    fn check_multi(&self, _req: &ServiceRequest) -> bool {
-        let should = should_serve(self, _req);
+    fn check_multi(&self, req: &ServiceRequest) -> bool {
+        let should = should_serve(self, req);
         should
+    }
+    pub fn from_dir(dir: impl Into<PathBuf>, opts: &Options) -> Self {
+        Self {
+            mount_path: "/".into(),
+            serve_from: opts.cwd.join(dir.into()),
+            index_file: "index.html".into(),
+        }
+    }
+    pub fn from_dir_routed(dir: impl Into<PathBuf>, mount_path: &str, opts: &Options) -> Self {
+        Self {
+            mount_path: mount_path.into(),
+            serve_from: opts.cwd.join(dir.into()),
+            index_file: "index.html".into(),
+        }
     }
 }
 
@@ -134,15 +151,17 @@ fn should_serve(ss: &ServeStatic, req: &ServiceRequest) -> bool {
     req.uri()
         .path_and_query()
         .map(|pq| {
-            let matches = pq.path().starts_with(&ss.mount_path);
-            let exists = file_path(pq.path(), &ss.serve_from);
+            // let matches = pq.path().starts_with(&ss.mount_path);
+            let path = pq.path();
+            let trimmed = path.trim_start_matches(&ss.mount_path);
+            let exists = file_path(trimmed, &ss.serve_from);
             log::trace!(
                 "mount_path=[{}], dir=[{}], exists=[{:?}]",
                 ss.mount_path,
                 ss.serve_from.display(),
                 exists
             );
-            matches && exists.is_some()
+            exists.is_some()
         })
         .unwrap_or(false)
 }
@@ -189,28 +208,28 @@ pub fn create_server(opts: Options, sender: Sender<BrowserSyncMsg>) -> Server {
 
 // this function could be located in a different module
 fn config(cfg: &mut web::ServiceConfig, opts: &Options, sender: Sender<BrowserSyncMsg>) {
-    let ss = vec![
-        ServeStatic {
-            mount_path: "/".into(),
-            serve_from: "/Users/shaneosbourne/WebstormProjects/examples/middleware/middleware/bs3/fixtures".into(),
-            index_file: "index.html".into(),
-        },
-        ServeStatic {
-            mount_path: "/".into(),
-            serve_from: "/Users/shaneosbourne/WebstormProjects/examples/middleware/middleware/bs3/fixtures/alt".into(),
-            index_file: "index2.html".into(),
-        },
-    ];
+    let ss = opts
+        .trailing
+        .iter()
+        .map(|trailing| match trailing {
+            ServeStaticConfig::DirOnly(dir) => vec![ServeStatic::from_dir(dir, &opts)],
+            ServeStaticConfig::RoutesAndDir(inner) => inner
+                .routes
+                .iter()
+                .map(|r| ServeStatic::from_dir_routed(&inner.dir, r, &opts))
+                .collect(),
+        })
+        .flatten()
+        .collect::<Vec<ServeStatic>>();
 
-    let fw = FilesWrap { ss };
+    dbg!(&ss);
+
+    let fw = FilesWrap { serve_static: ss };
     let mods = RespModData {
         items: vec![Box::new(Script)],
     };
     cfg.app_data(Data::new(mods));
     cfg.app_data(Data::new(sender.clone()));
-    // dbg!(Script::route().to_str().expect("alwayds"));
-    // dbg!(&opts.cwd.join("bs3").join(Script::route().to_str().expect("u")));
-    // dbg!(opts.cwd.join("bs3").join(Script::serve_from()));
     let serve_from = if opts.cwd.ends_with("bs3") {
         opts.cwd.join("client-js")
     } else {
@@ -250,7 +269,7 @@ mod tests {
     #[actix_web::test]
     async fn test_index_html_get() -> Result<(), ()> {
         let (sender, _rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
-        let opts = Options::try_from_args(["bs3", "fixtures"]).expect("args");
+        let opts = Options::try_from_args(["___", "fixtures"]).expect("args");
         let app = test::init_service(
             App::new()
                 .wrap(read_response_body::RespMod)

@@ -17,7 +17,7 @@ pub struct Options {
     pub cwd: Cwd,
 
     // collect the rest
-    trailing: Vec<ServeStaticConfig>,
+    pub trailing: Vec<ServeStaticConfig>,
 }
 
 impl Options {
