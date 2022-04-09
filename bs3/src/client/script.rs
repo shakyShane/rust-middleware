@@ -2,8 +2,27 @@ use crate::resp_mod::RespMod;
 use actix_web::dev::{RequestHead, ResponseHead};
 use actix_web::http::header::{HeaderMap, ACCEPT, CONTENT_TYPE};
 
+use std::path::PathBuf;
+
 #[derive(Debug, Clone)]
 pub struct Script;
+
+impl Script {
+    const MOUNT_PATH: &'static str = "/__bs3/client-js";
+    pub const ROUTE: &'static str = "/__bs3";
+    pub const JS_DIR_DEV: &'static str = "client-js";
+    pub const JS_FILE_DEV: &'static str = "client.js";
+    pub fn route() -> &'static str {
+        Self::MOUNT_PATH
+    }
+    pub fn uri() -> String {
+        PathBuf::from(Self::ROUTE)
+            .join(Self::JS_DIR_DEV)
+            .join(Self::JS_FILE_DEV)
+            .to_string_lossy()
+            .to_string()
+    }
+}
 
 impl RespMod for Script {
     fn name(&self) -> String {

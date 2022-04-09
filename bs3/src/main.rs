@@ -1,4 +1,3 @@
-
 use anyhow::anyhow;
 use bs3_lib::options::Options;
 use bs3_lib::BrowserSyncMsg;

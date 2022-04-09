@@ -12,17 +12,17 @@ use actix_web::dev::{
     ServiceResponse,
 };
 
+use actix_web::http::header::{HeaderValue, CACHE_CONTROL, EXPIRES, PRAGMA};
 use actix_web::web::Data;
 use actix_web::{web, App, Error, HttpResponse, HttpServer};
 
-// use crate::multi::{Multi, MultiServiceFuture, MultiServiceTrait};
-
 use crate::options::Options;
+use crate::path_buf::PathBufWrap;
 use tokio::sync::mpsc::Sender;
 
 mod client;
-mod multi;
 pub mod options;
+mod path_buf;
 mod read_request_body;
 mod read_response_body;
 mod redirect;
@@ -34,10 +34,6 @@ mod simple;
 pub enum BrowserSyncMsg {
     Listening { port: u32 },
     ScriptInjection,
-}
-
-async fn last_fallback() -> HttpResponse {
-    HttpResponse::Ok().body("Hello!")
 }
 
 #[derive(Clone)]
@@ -53,8 +49,8 @@ struct FilesWrapServices {
 
 impl HttpServiceFactory for FilesWrap {
     fn register(self, config: &mut AppService) {
-        let d = ResourceDef::new("/");
-        config.register_service(d, None, self, None);
+        let rdef = ResourceDef::prefix("");
+        config.register_service(rdef, None, self, None);
     }
 }
 
@@ -89,9 +85,7 @@ impl ServiceFactory<ServiceRequest> for FilesWrap {
 impl Service<ServiceRequest> for FilesWrapServices {
     type Response = ServiceResponse;
     type Error = actix_web::error::Error;
-    // type Future = Pin<Box<dyn Future<Output = Result<ServiceResponse<BoxBody>, Error>>>>;
     type Future = Pin<Box<dyn Future<Output = Result<ServiceResponse, Error>>>>;
-    // type Future = Ready<Result<ServiceResponse, Error>>;
 
     fn poll_ready(&self, _ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -148,14 +142,13 @@ fn should_serve(ss: &ServeStatic, req: &ServiceRequest) -> bool {
                 ss.serve_from.display(),
                 exists
             );
-            dbg!(&exists);
             matches && exists.is_some()
         })
         .unwrap_or(false)
 }
 
 fn file_path(path: &str, dir: &Path) -> Option<PathBuf> {
-    if let Ok(real_path) = path.parse::<PathBuf>() {
+    if let Ok(real_path) = path.parse::<PathBufWrap>() {
         if let Ok(pb) = dir.join(&real_path).canonicalize() {
             return Some(pb);
         }
@@ -167,6 +160,20 @@ pub fn create_server(opts: Options, sender: Sender<BrowserSyncMsg>) -> Server {
     let server = HttpServer::new(move || {
         App::new()
             .wrap(read_response_body::RespMod)
+            .wrap_fn(|req, srv| {
+                let fut = srv.call(req);
+                async {
+                    let mut res = fut.await?;
+                    let headers = res.headers_mut();
+                    headers.insert(
+                        CACHE_CONTROL,
+                        HeaderValue::from_static("no-cache, no-store, must-revalidate"),
+                    );
+                    headers.insert(PRAGMA, HeaderValue::from_static("no-cache"));
+                    headers.insert(EXPIRES, HeaderValue::from_static("0"));
+                    Ok(res)
+                }
+            })
             .configure(|cfg| config(cfg, &opts.clone(), sender.clone()))
     });
 
@@ -178,44 +185,10 @@ pub fn create_server(opts: Options, sender: Sender<BrowserSyncMsg>) -> Server {
         .bind(addr)
         .unwrap()
         .run()
-
-    // let (stop_msg_sender, stop_msg_receiver) = oneshot::channel::<()>();
-    //
-    // actix_rt::spawn(async move {
-    //     sender
-    //         .try_send(BrowserSyncMsg::Listening { port: 8090 })
-    //         .unwrap();
-    //     let addr = ("127.0.0.1", 8080);
-    //     log::debug!("Trying to bind at {:?}", addr);
-    //     let binding = server
-    //         .bind(addr)
-    //         .unwrap()
-    //         .run()
-    //         .await
-    //         .map_err(|e| anyhow::anyhow!("{:?}", e));
-    //     match binding {
-    //         Ok(_) => {
-    //             log::debug!("server stopped successfully");
-    //             stop_msg_sender.send(())
-    //         }
-    //         Err(e) => {
-    //             log::error!("server stopped with error {:?}", e);
-    //             stop_msg_sender.send(())
-    //         }
-    //     }
-    // });
-    //
-    // stop_msg_receiver
-    //     .await
-    //     .map_err(|e| anyhow::anyhow!("{:?}", e))
 }
 
 // this function could be located in a different module
-fn config(cfg: &mut web::ServiceConfig, _opts: &Options, sender: Sender<BrowserSyncMsg>) {
-    let mods = RespModData {
-        items: vec![Box::new(Script)],
-    };
-
+fn config(cfg: &mut web::ServiceConfig, opts: &Options, sender: Sender<BrowserSyncMsg>) {
     let ss = vec![
         ServeStatic {
             mount_path: "/".into(),
@@ -230,64 +203,34 @@ fn config(cfg: &mut web::ServiceConfig, _opts: &Options, sender: Sender<BrowserS
     ];
 
     let fw = FilesWrap { ss };
+    let mods = RespModData {
+        items: vec![Box::new(Script)],
+    };
     cfg.app_data(Data::new(mods));
     cfg.app_data(Data::new(sender.clone()));
-    // cfg.wrap_fn(|req, srv| {
-    //     let fut = srv.call(req);
-    //     async {
-    //         let mut res = fut.await?;
-    //         let headers = res.headers_mut();
-    //         headers.insert(
-    //             CACHE_CONTROL,
-    //             HeaderValue::from_static("no-cache, no-store, must-revalidate"),
-    //         );
-    //         headers.insert(PRAGMA, HeaderValue::from_static("no-cache"));
-    //         headers.insert(EXPIRES, HeaderValue::from_static("0"));
-    //         Ok(res)
-    //     }
-    // });
+    // dbg!(Script::route().to_str().expect("alwayds"));
+    // dbg!(&opts.cwd.join("bs3").join(Script::route().to_str().expect("u")));
+    // dbg!(opts.cwd.join("bs3").join(Script::serve_from()));
+    let serve_from = if opts.cwd.ends_with("bs3") {
+        opts.cwd.join("client-js")
+    } else {
+        opts.cwd.join("bs3/client-js")
+    };
+    cfg.service(Files::new(Script::route(), serve_from));
     cfg.service(fw);
-    cfg.service(Files::new("/__bs3/client-js", "./bs3/client-js"));
-}
-
-pub fn exec(_sender: Sender<BrowserSyncMsg>) {
-    let (_sender, _rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
-    // let server = start(sender);
-    // actix_web::rt::System::new().block_on(server);
-    // actix_web::rt::System::new().block_on(async {
-    //     let server = start(sender);
-    //
-    // });
-    // tokio::spawn(|| async move {
-    //     let server = start(sender);
-    //     match server.await.await {
-    //         Ok(_) => {
-    //             println!("erm");
-    //         }
-    //         Err(_) => {
-    //             println!("bad!")
-    //         }
-    //     };
-    // });
 }
 
 #[cfg(test)]
 mod tests {
+    use actix_web::body::to_bytes;
     use actix_web::{test, App};
-    
 
     use super::*;
 
     #[actix_web::test]
-    async fn test_index_get() {
-        // let dir1 = "fixtures";
-        // let dir2 = "fixtures/alt";
-        // let cwd = current_dir().expect("current_dir");
-        // let _joined1 = cwd.join(dir1);
-        // let _joined2 = cwd.join(dir2);
-
+    async fn test_index_get() -> Result<(), ()> {
         let (sender, _rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
-        let opts = Options::default();
+        let opts = Options::try_from_args(["bs3", "fixtures"]).expect("args");
         let app = test::init_service(
             App::new()
                 .wrap(read_response_body::RespMod)
@@ -301,5 +244,27 @@ mod tests {
         let bytes = test::call_and_read_body(&app, req).await;
         let v = String::from_utf8(bytes.to_vec()).expect("to string");
         assert!(v.contains("injected by Browsersync"));
+        Ok(())
+    }
+
+    #[actix_web::test]
+    async fn test_index_html_get() -> Result<(), ()> {
+        let (sender, _rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
+        let opts = Options::try_from_args(["bs3", "fixtures"]).expect("args");
+        let app = test::init_service(
+            App::new()
+                .wrap(read_response_body::RespMod)
+                .configure(|cfg| config(cfg, &opts, sender.clone())),
+        )
+        .await;
+        let req = test::TestRequest::default()
+            .uri(Script::uri().as_str())
+            .to_request();
+        let srv_resp = test::call_service(&app, req).await;
+        assert!(srv_resp.status().is_success());
+        let bytes = to_bytes(srv_resp.into_body()).await.expect("body");
+        let _as_str = std::str::from_utf8(&bytes).expect("utf8 read");
+        assert_eq!(bytes.to_vec(), include_bytes!("../client-js/client.js"));
+        Ok(())
     }
 }
