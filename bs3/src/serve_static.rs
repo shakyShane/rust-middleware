@@ -1,30 +1,59 @@
 use crate::multi_service::MultiServiceImpl;
 use crate::Options;
 use actix_web::dev::ServiceRequest;
+use std::ffi::OsStr;
+use std::ops::Deref;
 
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Default)]
 pub struct ServeStatic {
     pub mount_path: String,
-    pub serve_from: PathBuf,
+    pub serve_from: ServeFrom,
     pub index_file: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ServeFrom(PathBuf);
+
+impl ServeFrom {
+    pub fn new(cwd: &Path, dir: impl Into<PathBuf>) -> Self {
+        let as_pb = dir.into();
+        let pb = if as_pb == PathBuf::from(".") {
+            cwd.to_path_buf()
+        } else {
+            cwd.join(as_pb)
+        };
+        Self(pb)
+    }
+}
+
+impl Deref for ServeFrom {
+    type Target = PathBuf;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<OsStr> for ServeFrom {
+    fn as_ref(&self) -> &OsStr {
+        self.0.as_os_str()
+    }
 }
 
 impl ServeStatic {
     pub fn from_dir(dir: impl Into<PathBuf>, opts: &Options) -> Self {
-        todo!("from_dir solve '.' use case");
         Self {
             mount_path: "/".into(),
-            serve_from: opts.cwd.join(dir.into()),
+            serve_from: ServeFrom::new(&opts.cwd, dir),
             index_file: "index.html".into(),
         }
     }
     pub fn from_dir_routed(dir: impl Into<PathBuf>, mount_path: &str, opts: &Options) -> Self {
-        todo!("from_dir_routed solve '.' use case");
         Self {
             mount_path: mount_path.into(),
-            serve_from: opts.cwd.join(dir.into()),
+            serve_from: ServeFrom::new(&opts.cwd, dir),
             index_file: "index.html".into(),
         }
     }

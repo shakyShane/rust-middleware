@@ -3,7 +3,6 @@ use actix_web::dev::{RequestHead, ResponseHead};
 use actix_web::http::header::{HeaderMap, ACCEPT, CONTENT_TYPE};
 
 use actix_web::{web, HttpRequest, HttpResponse};
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, Default)]
 pub struct Script {
@@ -12,10 +11,7 @@ pub struct Script {
 
 impl Script {
     pub fn with_debug() -> Self {
-        Self {
-            debug: true,
-            ..Default::default()
-        }
+        Self { debug: true }
     }
     const MOUNT_PATH: &'static str = "/__bs3/client-js";
     pub const ROUTE: &'static str = "/__bs3";
@@ -25,7 +21,7 @@ impl Script {
         Self::MOUNT_PATH
     }
     pub fn uri() -> String {
-        PathBuf::from(Self::ROUTE)
+        std::path::PathBuf::from(Self::ROUTE)
             .join(Self::JS_DIR_DEV)
             .join(Self::JS_FILE_DEV)
             .to_string_lossy()

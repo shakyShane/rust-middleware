@@ -1,12 +1,11 @@
 use crate::client::script::Script;
 use crate::resp_mod::RespModData;
-use actix_files::{Files, NamedFile};
+
 use actix_web::dev::{Server, Service};
 
-use actix_web::http::header;
-use actix_web::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE, EXPIRES, PRAGMA};
+use actix_web::http::header::{HeaderValue, CACHE_CONTROL, EXPIRES, PRAGMA};
 use actix_web::web::Data;
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{web, App, HttpServer};
 
 use crate::options::Options;
 
@@ -50,7 +49,7 @@ fn config(cfg: &mut web::ServiceConfig, opts: &Options, sender: Sender<BrowserSy
     let ss: Vec<ServeStatic> = opts
         .trailing
         .iter()
-        .map(|trailing| match trailing {
+        .flat_map(|trailing| match trailing {
             ServeStaticConfig::DirOnly(dir) => vec![ServeStatic::from_dir(dir, opts)],
             ServeStaticConfig::RoutesAndDir(inner) => inner
                 .routes
@@ -58,7 +57,6 @@ fn config(cfg: &mut web::ServiceConfig, opts: &Options, sender: Sender<BrowserSy
                 .map(|r| ServeStatic::from_dir_routed(&inner.dir, r, opts))
                 .collect(),
         })
-        .flatten()
         .collect();
 
     dbg!(&ss);
