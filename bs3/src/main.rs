@@ -1,6 +1,6 @@
 use anyhow::anyhow;
+use bs3_lib::msg::BrowserSyncMsg;
 use bs3_lib::options::Options;
-use bs3_lib::BrowserSyncMsg;
 use clap::Parser;
 
 #[actix_web::main]
@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
     actix_rt::spawn(async move {
-        match bs3_lib::create_server(options.clone(), sender).await {
+        match bs3_lib::server::create_server(options.clone(), sender).await {
             Ok(_) => {
                 done_sender.send(()).unwrap();
             }

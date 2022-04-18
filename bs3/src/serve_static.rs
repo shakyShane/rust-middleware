@@ -1,144 +1,59 @@
-use serde::de;
-use std::fmt;
-use std::path::PathBuf;
-use std::str::FromStr;
-use thiserror::Error;
+use crate::multi_service::MultiServiceImpl;
+use crate::Options;
+use actix_web::dev::ServiceRequest;
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
-#[serde(untagged)]
-pub enum ServeStaticConfig {
-    #[serde(deserialize_with = "deserialize_dir")]
-    DirOnly(PathBuf),
-    RoutesAndDir(RoutesAndDir),
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, Default)]
+pub struct ServeStatic {
+    pub mount_path: String,
+    pub serve_from: PathBuf,
+    pub index_file: String,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
-pub struct RoutesAndDir {
-    pub routes: Vec<String>,
-    #[serde(deserialize_with = "deserialize_dir")]
-    pub dir: PathBuf,
-}
-
-impl ServeStaticConfig {
-    pub fn from_dir_only(path: impl Into<PathBuf>) -> Self {
-        ServeStaticConfig::DirOnly(path.into())
+impl ServeStatic {
+    pub fn from_dir(dir: impl Into<PathBuf>, opts: &Options) -> Self {
+        Self {
+            mount_path: "/".into(),
+            serve_from: opts.cwd.join(dir.into()),
+            index_file: "index.html".into(),
+        }
     }
-    pub fn try_path_buf(item: &str) -> Result<PathBuf, ServeStaticError> {
-        match ServeStaticConfig::from_str(item) {
-            Ok(ServeStaticConfig::DirOnly(pb)) => Ok(pb),
-            Ok(ServeStaticConfig::RoutesAndDir(..)) => Err(ServeStaticError::Invalid),
-            Err(e) => Err(e),
+    pub fn from_dir_routed(dir: impl Into<PathBuf>, mount_path: &str, opts: &Options) -> Self {
+        Self {
+            mount_path: mount_path.into(),
+            serve_from: opts.cwd.join(dir.into()),
+            index_file: "index.html".into(),
         }
     }
 }
 
-impl Default for ServeStaticConfig {
-    fn default() -> Self {
-        ServeStaticConfig::from_dir_only(".")
+impl MultiServiceImpl for ServeStatic {
+    fn should_serve(&self, req: &ServiceRequest) -> bool {
+        req.uri()
+            .path_and_query()
+            .map(|pq| {
+                // let matches = pq.path().starts_with(&ss.mount_path);
+                let path = pq.path();
+                let trimmed = path.trim_start_matches(&self.mount_path);
+                let exists = file_path(trimmed, &self.serve_from);
+                log::trace!(
+                    "mount_path=[{}], dir=[{}], exists=[{:?}]",
+                    self.mount_path,
+                    self.serve_from.display(),
+                    exists
+                );
+                exists.is_some()
+            })
+            .unwrap_or(false)
     }
 }
 
-impl FromStr for ServeStaticConfig {
-    type Err = ServeStaticError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let split = s.split(':').collect::<Vec<&str>>();
-        match split.as_slice() {
-            [one] => {
-                if one.is_empty() {
-                    Err(ServeStaticError::Empty)
-                } else {
-                    Ok(ServeStaticConfig::from_dir_only(one))
-                }
-            }
-            [rs @ .., dir] => {
-                let as_routes = rs.iter().map(|s| s.to_string()).collect::<Vec<String>>();
-                let dir = ServeStaticConfig::try_path_buf(dir)?;
-                Ok(ServeStaticConfig::RoutesAndDir(RoutesAndDir {
-                    dir,
-                    routes: as_routes,
-                }))
-            }
-            _ => {
-                println!("got here2");
-                todo!("here")
-            }
+fn file_path(path: &str, dir: &Path) -> Option<PathBuf> {
+    if let Ok(real_path) = path.parse::<crate::PathBufWrap>() {
+        if let Ok(pb) = dir.join(&real_path).canonicalize() {
+            return Some(pb);
         }
     }
-}
-
-#[test]
-fn ss_from_str() -> anyhow::Result<()> {
-    let ss = ServeStaticConfig::from_str("node_modules")?;
-    assert_eq!(
-        ss,
-        ServeStaticConfig::DirOnly(PathBuf::from("node_modules"))
-    );
-
-    let ss = ServeStaticConfig::from_str("/node:node_modules")?;
-    assert_eq!(
-        ss,
-        ServeStaticConfig::RoutesAndDir(RoutesAndDir {
-            dir: PathBuf::from("node_modules"),
-            routes: vec!["/node".into()]
-        })
-    );
-
-    let ss = ServeStaticConfig::from_str("");
-    assert!(ss.is_err());
-
-    let ss = ServeStaticConfig::from_str("router:");
-    assert!(ss.is_err());
-
-    Ok(())
-}
-
-#[derive(Error, Debug)]
-pub enum ServeStaticError {
-    #[error("Invalid serve static option")]
-    Invalid,
-    #[error("unknown serve static error")]
-    Unknown,
-    #[error(
-        "directory path cannot be empty
-
-    Here's an example of a valid option
-
-    --serve-static /node_modules:node_modules
-    "
-    )]
-    Empty,
-}
-
-///
-/// Helpers for deserializing a dir argument
-///
-/// todo: add verification here
-///
-pub fn deserialize_dir<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
-where
-    D: de::Deserializer<'de>,
-{
-    struct DirVisitor;
-
-    impl<'de> de::Visitor<'de> for DirVisitor {
-        type Value = PathBuf;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("either `7.1`, `7.2`, `7.3` or `7.4`")
-        }
-        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            // let r: Result<PathBuf, _> = Ok();
-            // r.map_err(E::custom)
-            match ServeStaticConfig::from_str(v) {
-                Ok(ServeStaticConfig::DirOnly(pb)) => Ok(pb),
-                _ => unreachable!("should not get here when deserializing a dir - {}", v),
-            }
-        }
-    }
-
-    deserializer.deserialize_any(DirVisitor)
+    None
 }

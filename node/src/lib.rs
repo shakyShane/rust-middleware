@@ -1,7 +1,8 @@
 use neon::prelude::*;
 
+use bs3_lib::msg::BrowserSyncMsg;
 use bs3_lib::options::Options;
-use bs3_lib::{create_server, BrowserSyncMsg};
+use bs3_lib::server::create_server;
 use once_cell::sync::OnceCell;
 use tokio::runtime::Runtime;
 

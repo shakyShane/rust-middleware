@@ -1,4 +1,4 @@
-use crate::serve_static::ServeStaticConfig;
+use crate::ServeStaticConfig;
 use clap::Parser;
 use std::env::current_dir;
 use std::ffi::OsString;
@@ -64,7 +64,7 @@ impl FromStr for Cwd {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::serve_static::{RoutesAndDir, ServeStaticConfig};
+    use crate::serve_static_config::RoutesAndDir;
     #[test]
     fn test() -> anyhow::Result<()> {
         let opts = <Options as Parser>::try_parse_from([
