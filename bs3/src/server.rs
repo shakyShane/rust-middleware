@@ -111,6 +111,47 @@ mod tests {
     }
 
     #[actix_web::test]
+    async fn test_other_html_get() -> Result<(), ()> {
+        let (sender, _rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
+        let opts = Options::try_from_args(["bs3", "fixtures"]).expect("args");
+        let app = test::init_service(
+            App::new()
+                .wrap(read_response_body::RespMod)
+                .configure(|cfg| config(cfg, &opts, sender.clone())),
+        )
+        .await;
+        let req_html = test::TestRequest::default()
+            .uri("/other.html")
+            .insert_header(("accept", "text/html"))
+            .to_request();
+        let bytes = test::call_and_read_body(&app, req_html).await;
+        let v = String::from_utf8(bytes.to_vec()).expect("to string");
+        assert!(v.contains("<h1>Other page</h1>"));
+        assert!(v.contains("injected by Browsersync"));
+        Ok(())
+    }
+
+    #[actix_web::test]
+    async fn test_css_get() -> Result<(), ()> {
+        let (sender, _rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
+        let opts = Options::try_from_args(["bs3", "fixtures"]).expect("args");
+        let app = test::init_service(
+            App::new()
+                .wrap(read_response_body::RespMod)
+                .configure(|cfg| config(cfg, &opts, sender.clone())),
+        )
+        .await;
+        let req_css = test::TestRequest::default()
+            .uri("/css/style.css")
+            .to_request();
+
+        let bytes = test::call_and_read_body(&app, req_css).await;
+        let v = String::from_utf8(bytes.to_vec()).expect("to string");
+        assert!(v.contains("background: pink"));
+        Ok(())
+    }
+
+    #[actix_web::test]
     async fn test_index_html_get() -> Result<(), ()> {
         let (sender, _rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
         let opts = Options::try_from_args(["___", "fixtures"]).expect("args");

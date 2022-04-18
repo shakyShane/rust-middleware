@@ -24,8 +24,20 @@ pub struct FilesWrapServices {
 
 impl HttpServiceFactory for MultiService {
     fn register(self, config: &mut AppService) {
-        let prefixes: Vec<&String> = self.serve_static.iter().map(|ss| &ss.mount_path).collect();
-        println!("{:?}", prefixes);
+        let mut prefixes = self
+            .serve_static
+            .iter()
+            .map(|ss| &ss.mount_path)
+            .collect::<Vec<&String>>();
+
+        // If a root was given, ensure that an empty prefix is added
+        // this ensures that file-serving works correctly.
+        let v = String::from("");
+
+        if prefixes.contains(&&String::from("/")) {
+            prefixes.push(&v);
+        }
+
         let rdef = ResourceDef::prefix(prefixes);
         config.register_service(rdef, None, self, None);
     }
