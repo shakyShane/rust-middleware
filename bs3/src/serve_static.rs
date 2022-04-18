@@ -13,6 +13,42 @@ pub struct ServeStatic {
     pub index_file: String,
 }
 
+///
+/// This is here to encapsulate any logic around resolving a 'serve' directory.
+///
+/// For example, "." should just resolve to the current working directory, and not
+/// cwd + '/.'
+///
+/// ## Current Dir
+/// ```rust
+/// # use std::path::PathBuf;
+/// # use bs3_lib::serve_static::ServeFrom;
+/// let cwd = PathBuf::from("/users/shakyshane");
+/// let dir = PathBuf::from(".");
+/// let serve_from = ServeFrom::new(&cwd, &dir);
+/// assert_eq!(*serve_from, cwd);
+/// ```
+///
+/// ## Current Dir + relative path
+/// ```rust
+/// # use std::path::PathBuf;
+/// # use bs3_lib::serve_static::ServeFrom;
+/// let cwd = PathBuf::from("/users/shakyshane");
+/// let dir = PathBuf::from("fixtures");
+/// let serve_from = ServeFrom::new(&cwd, &dir);
+/// assert_eq!(*serve_from, cwd.join(dir));
+/// ```
+///
+/// ## Current Dir + absolute path
+/// ```rust
+/// # use std::path::PathBuf;
+/// # use bs3_lib::serve_static::ServeFrom;
+/// let cwd = PathBuf::from("/users/shakyshane");
+/// let dir = PathBuf::from("/users/kittie/sites/demo");
+/// let serve_from = ServeFrom::new(&cwd, &dir);
+/// assert_eq!(*serve_from, dir);
+/// ```
+///
 #[derive(Debug, Clone, Default)]
 pub struct ServeFrom(PathBuf);
 
