@@ -1,7 +1,7 @@
 const r = require("../index");
 
-const callback = (type) => {
-    console.log(type, "<--")
+const callback = (...args) => {
+    console.log(args, "<--")
 }
 
 const output2 = r.init(callback).then(res => {

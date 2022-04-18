@@ -1,14 +1,14 @@
 const {fork} = require("child_process");
 const {join} = require("path");
 
-const handle = fork(join(__dirname, "init.js"), {
+const handle = fork(join(__dirname, "init.js"), process.argv.slice(2), {
     stdio: "inherit"
 })
 
 handle.on('message', (message) => {
     switch (message?.type) {
         case "listening": {
-            console.log('is listening');
+            console.log('[JS] is listening');
             break;
         }
         default: {

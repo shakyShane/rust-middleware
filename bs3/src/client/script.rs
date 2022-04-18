@@ -2,12 +2,21 @@ use crate::resp_mod::RespMod;
 use actix_web::dev::{RequestHead, ResponseHead};
 use actix_web::http::header::{HeaderMap, ACCEPT, CONTENT_TYPE};
 
+use actix_web::{web, HttpRequest, HttpResponse};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone)]
-pub struct Script;
+#[derive(Debug, Clone, Default)]
+pub struct Script {
+    debug: bool,
+}
 
 impl Script {
+    pub fn with_debug() -> Self {
+        Self {
+            debug: true,
+            ..Default::default()
+        }
+    }
     const MOUNT_PATH: &'static str = "/__bs3/client-js";
     pub const ROUTE: &'static str = "/__bs3";
     pub const JS_DIR_DEV: &'static str = "client-js";
@@ -21,6 +30,20 @@ impl Script {
             .join(Self::JS_FILE_DEV)
             .to_string_lossy()
             .to_string()
+    }
+
+    pub fn configure(&self, cfg: &mut web::ServiceConfig) {
+        println!("debug?: {}", self.debug);
+        async fn script_response(_req: HttpRequest) -> HttpResponse {
+            let str = include_str!("../../client-js/client.js");
+            HttpResponse::Ok()
+                .insert_header(("content-type", "application/javascript"))
+                .body(str)
+        }
+
+        cfg.service(
+            web::scope(Script::route()).service(web::resource("/client.js").to(script_response)),
+        );
     }
 }
 

@@ -1,11 +1,12 @@
 use crate::client::script::Script;
 use crate::resp_mod::RespModData;
-use actix_files::Files;
+use actix_files::{Files, NamedFile};
 use actix_web::dev::{Server, Service};
 
-use actix_web::http::header::{HeaderValue, CACHE_CONTROL, EXPIRES, PRAGMA};
+use actix_web::http::header;
+use actix_web::http::header::{HeaderValue, CACHE_CONTROL, CONTENT_TYPE, EXPIRES, PRAGMA};
 use actix_web::web::Data;
-use actix_web::{web, App, HttpServer};
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 
 use crate::options::Options;
 
@@ -34,7 +35,7 @@ pub fn create_server(opts: Options, sender: Sender<BrowserSyncMsg>) -> Server {
             .configure(|cfg| config(cfg, &opts.clone(), sender.clone()))
     });
 
-    println!("trying to bind to {:?}", ("127.0.0.1", 8080));
+    println!("trying to bind to 🚀 {:?}", ("127.0.0.1", 8080));
     let addr = ("127.0.0.1", 8080);
     server
         .disable_signals()
@@ -49,7 +50,7 @@ fn config(cfg: &mut web::ServiceConfig, opts: &Options, sender: Sender<BrowserSy
     let ss: Vec<ServeStatic> = opts
         .trailing
         .iter()
-        .flat_map(|trailing| match trailing {
+        .map(|trailing| match trailing {
             ServeStaticConfig::DirOnly(dir) => vec![ServeStatic::from_dir(dir, opts)],
             ServeStaticConfig::RoutesAndDir(inner) => inner
                 .routes
@@ -57,22 +58,30 @@ fn config(cfg: &mut web::ServiceConfig, opts: &Options, sender: Sender<BrowserSy
                 .map(|r| ServeStatic::from_dir_routed(&inner.dir, r, opts))
                 .collect(),
         })
+        .flatten()
         .collect();
 
-    // dbg!(&ss);
+    dbg!(&ss);
 
     let fw = MultiService { serve_static: ss };
+
+    // todo: How to pass this debug flag?
+    let script = Script::with_debug();
     let mods = RespModData {
-        items: vec![Box::new(Script)],
+        items: vec![Box::new(script.clone())],
     };
     cfg.app_data(Data::new(mods));
     cfg.app_data(Data::new(sender));
-    let serve_from = if opts.cwd.ends_with("bs3") {
-        opts.cwd.join("client-js")
-    } else {
-        opts.cwd.join("bs3/client-js")
-    };
-    cfg.service(Files::new(Script::route(), serve_from));
+
+    // let serve_from = if opts.cwd.ends_with("bs3") {
+    //     opts.cwd.join("client-js")
+    // } else {
+    //     opts.cwd.join("bs3/client-js")
+    // };
+    // cfg.service(Files::(Script::route(), serve_from));
+
+    script.configure(cfg);
+
     cfg.service(fw);
 }
 

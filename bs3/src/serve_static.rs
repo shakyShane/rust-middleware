@@ -13,6 +13,7 @@ pub struct ServeStatic {
 
 impl ServeStatic {
     pub fn from_dir(dir: impl Into<PathBuf>, opts: &Options) -> Self {
+        todo!("from_dir solve '.' use case");
         Self {
             mount_path: "/".into(),
             serve_from: opts.cwd.join(dir.into()),
@@ -20,6 +21,7 @@ impl ServeStatic {
         }
     }
     pub fn from_dir_routed(dir: impl Into<PathBuf>, mount_path: &str, opts: &Options) -> Self {
+        todo!("from_dir_routed solve '.' use case");
         Self {
             mount_path: mount_path.into(),
             serve_from: opts.cwd.join(dir.into()),
@@ -37,7 +39,8 @@ impl MultiServiceImpl for ServeStatic {
                 let path = pq.path();
                 let trimmed = path.trim_start_matches(&self.mount_path);
                 let exists = file_path(trimmed, &self.serve_from);
-                log::trace!(
+                // println!("trimmed={}", trimmed);
+                println!(
                     "mount_path=[{}], dir=[{}], exists=[{:?}]",
                     self.mount_path,
                     self.serve_from.display(),

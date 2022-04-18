@@ -25,6 +25,7 @@ pub struct FilesWrapServices {
 impl HttpServiceFactory for MultiService {
     fn register(self, config: &mut AppService) {
         let prefixes: Vec<&String> = self.serve_static.iter().map(|ss| &ss.mount_path).collect();
+        println!("{:?}", prefixes);
         let rdef = ResourceDef::prefix(prefixes);
         config.register_service(rdef, None, self, None);
     }
@@ -49,6 +50,7 @@ impl ServiceFactory<ServiceRequest> for MultiService {
             for file in &files {
                 services.push(file.new_service(()).await)
             }
+            println!("{:?}", services.len());
             Ok(FilesWrapServices {
                 files,
                 services,

@@ -10,8 +10,9 @@
     "build-release": "npm run build -- --release",
     "install": "npm run build-release",
     "pretest": "npm run build",
-    "test": "npm run test:api",
-    "test:api": "node test/api.js"
+    "test": "npm run build && npm run test:api",
+    "test:api": "node test/api.js .",
+    "d": "echo $PATH"
   },
   "author": "",
   "license": "ISC",
