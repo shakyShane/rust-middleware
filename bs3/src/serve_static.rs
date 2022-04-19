@@ -1,5 +1,5 @@
 use crate::multi_service::MultiServiceImpl;
-use crate::Options;
+use crate::{Options, ServeStaticConfig};
 use actix_web::dev::ServiceRequest;
 use std::ffi::OsStr;
 use std::ops::Deref;
@@ -92,6 +92,19 @@ impl ServeStatic {
             serve_from: ServeFrom::new(&opts.cwd, dir),
             index_file: "index.html".into(),
         }
+    }
+    pub fn from_configs(configs: &[ServeStaticConfig], opts: &Options) -> Vec<Self> {
+        configs
+            .iter()
+            .flat_map(|trailing| match trailing {
+                ServeStaticConfig::DirOnly(dir) => vec![ServeStatic::from_dir(dir, opts)],
+                ServeStaticConfig::RoutesAndDir(inner) => inner
+                    .routes
+                    .iter()
+                    .map(|r| ServeStatic::from_dir_routed(&inner.dir, r, opts))
+                    .collect(),
+            })
+            .collect()
     }
 }
 

@@ -62,7 +62,7 @@ impl ServiceFactory<ServiceRequest> for MultiService {
             for file in &files {
                 services.push(file.new_service(()).await)
             }
-            println!("{:?}", services.len());
+            println!("multi services count: {:?}", services.len());
             Ok(FilesWrapServices {
                 files,
                 services,

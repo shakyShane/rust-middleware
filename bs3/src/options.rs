@@ -11,7 +11,7 @@ use std::str::FromStr;
 #[clap(author, version, about, long_about = None)]
 pub struct Options {
     #[clap(long)]
-    serve_static: Option<Vec<ServeStaticConfig>>,
+    pub serve_static: Option<Vec<ServeStaticConfig>>,
 
     #[clap(long, default_value_t)]
     pub cwd: Cwd,
