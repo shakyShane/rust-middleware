@@ -9,6 +9,7 @@ use actix_web::{web, App, HttpServer};
 
 use crate::options::Options;
 
+use crate::client::runtime::Runtime;
 use crate::{read_response_body, BrowserSyncMsg, MultiService, ServeStatic};
 use tokio::sync::mpsc::Sender;
 
@@ -55,6 +56,7 @@ fn config(cfg: &mut web::ServiceConfig, opts: &Options, sender: Sender<BrowserSy
 
     // todo: How to pass this debug flag?
     let script = Script::with_debug();
+    let runtime = Runtime::with_debug();
     let mods = RespModData {
         items: vec![Box::new(script.clone())],
     };
@@ -62,6 +64,7 @@ fn config(cfg: &mut web::ServiceConfig, opts: &Options, sender: Sender<BrowserSy
     cfg.app_data(Data::new(mods));
     cfg.app_data(Data::new(sender));
 
+    runtime.configure(opts, cfg);
     script.configure(cfg);
 
     cfg.service(services);

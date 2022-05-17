@@ -101,7 +101,23 @@ impl Service<ServiceRequest> for FilesWrapServices {
                 // let ff = f.call(req).await;
                 // ff
                 let (req, _) = req.into_parts();
-                let resp = HttpResponse::NotFound().body("oops!");
+                let uri = req.uri();
+                let html = r#"<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="ie=edge">
+<title>Add a response</title>
+</head>
+<body>
+<pre><code></code></pre>
+<bs3-app></bs3-app>
+<script src="/__bs3/app-js/dist/index.js"></script>
+</body>
+</html>"#;
+
+                let resp = HttpResponse::Ok().content_type("text/html").body(html);
                 let srv_resp = ServiceResponse::new(req, resp);
                 Ok(srv_resp)
             })
