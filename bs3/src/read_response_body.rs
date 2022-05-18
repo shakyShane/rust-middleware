@@ -67,7 +67,23 @@ where
                 .map(|x| x.get_ref());
 
             if resp_mod_data_opt.is_none() {
-                log::debug!("no transforms found, at all");
+                log::trace!("no transforms found, at all");
+                return Ok(res);
+            }
+
+            //
+            // 'indexes' are the transforms that should be applied to the body.
+            // eg: if 'indexes' is [0, 1] -> this means 2 transforms will be applied to this response
+            //
+            let indexes: Vec<usize> = resp_mod_data_opt
+                .map(|resp_mod_data| resp_mod_data.get_transform_indexes(req_head, res_head))
+                .unwrap_or_else(Vec::new);
+
+            //
+            // Early return if no-one wants to edit this response
+            //
+            if indexes.is_empty() {
+                log::trace!("returning early - nothing to process");
                 return Ok(res);
             }
 
@@ -79,28 +95,13 @@ where
                 .app_data::<web::Data<tokio::sync::mpsc::Sender<BrowserSyncMsg>>>()
                 .map(|x| x.get_ref());
 
+            //
+            // Send a message about this request being overridden
+            //
             if let Some(channel) = channel {
-                channel
-                    .try_send(BrowserSyncMsg::ScriptInjection)
-                    .expect("example");
-            }
-
-            //
-            // 'indexes' are the transforms that should be applied to the body.
-            // eg: if 'indexes' is [0, 1] -> this means 2 transforms will be applied to this response
-            //
-            let indexes: Vec<usize> = resp_mod_data_opt
-                .map(|resp_mod_data| resp_mod_data.get_transform_indexes(req_head, res_head))
-                .unwrap_or_else(Vec::new);
-
-            log::debug!("indexes to process = {:?}", indexes);
-
-            //
-            // Early return if no-one wants to edit this response
-            //
-            if indexes.is_empty() {
-                log::trace!("returning early - nothing to process");
-                return Ok(res);
+                if let Err(e) = channel.try_send(BrowserSyncMsg::ScriptInjection) {
+                    log::error!("Could not send: {:?}", e);
+                }
             }
 
             //

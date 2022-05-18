@@ -1,11 +1,15 @@
 use crate::{ResourceDef, ServeStatic, Service, ServiceFactory};
 use actix_files::{Files, FilesService};
 use actix_web::dev::{AppService, HttpServiceFactory, ServiceRequest, ServiceResponse};
-use actix_web::{Error, HttpResponse};
+use actix_web::{web, Error, HttpResponse};
 use std::future::Future;
+use std::ops::Deref;
 
+use crate::client::html::BASE_HTML;
+use crate::client::runtime::TempData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct MultiService {
@@ -81,46 +85,61 @@ impl Service<ServiceRequest> for FilesWrapServices {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&self, req: ServiceRequest) -> Self::Future {
-        let _uri = req.uri();
+    fn call(&self, srv_req: ServiceRequest) -> Self::Future {
+        let _uri = srv_req.uri();
         let handler = self
             .serve_static
             .iter()
-            .position(|ss| ss.should_serve(&req));
+            .position(|ss| ss.should_serve(&srv_req));
 
+        // let temp_handlers = req
+        //     .app_data::<web::Data<Mutex<TempData>>>()
+        //     .map(|x| x.get_ref());
+        //
+        // if let Some(v) = temp_handlers {
+        //     dbg!("hanlders", v.lock().deref().routes.len())
+        // }
+        let future;
         if let Some(index) = handler {
             let s = self.services.get(index);
             if let Some(Ok(srv)) = s {
-                srv.call(req)
+                future = srv.call(srv_req);
             } else {
-                unreachable!()
+                unreachable!("how did we get here?");
             }
         } else {
-            Box::pin(async move {
+            future = Box::pin(async move {
+                let (req, _) = srv_req.into_parts();
+                let uri = req.uri();
+                let temp_handlers = req
+                    .app_data::<web::Data<Mutex<TempData>>>()
+                    .map(|x| x.get_ref());
+
+                if let Some(temp_data) = temp_handlers {
+                    let temp_data = temp_data.lock().await;
+                    let temp_data = temp_data.deref();
+                    let routes = temp_data.route_for(uri);
+                    let _cloned = routes.clone();
+                    if let Some(temp_route) = temp_data.route_for(uri) {
+                        let resp = HttpResponse::Ok()
+                            .content_type("text/html")
+                            .body(temp_route.body.clone());
+                        let cloned_req = req.clone();
+                        let srv_resp = ServiceResponse::new(cloned_req, resp);
+                        return Ok(srv_resp);
+                    }
+                }
+
                 // let f = h.await.expect("of course");
                 // let ff = f.call(req).await;
                 // ff
-                let (req, _) = req.into_parts();
-                let uri = req.uri();
-                let html = r#"<!doctype html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
-<meta http-equiv="X-UA-Compatible" content="ie=edge">
-<title>Add a response</title>
-</head>
-<body>
-<pre><code></code></pre>
-<bs3-app></bs3-app>
-<script src="/__bs3/app-js/dist/index.js"></script>
-</body>
-</html>"#;
-
-                let resp = HttpResponse::Ok().content_type("text/html").body(html);
+                let _uri = req.uri();
+                let resp = HttpResponse::Ok().content_type("text/html").body(BASE_HTML);
                 let srv_resp = ServiceResponse::new(req, resp);
                 Ok(srv_resp)
             })
         }
+
+        future
     }
 }

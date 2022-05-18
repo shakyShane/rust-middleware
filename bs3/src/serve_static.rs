@@ -118,7 +118,7 @@ impl MultiServiceImpl for ServeStatic {
                 let trimmed = path.trim_start_matches(&self.mount_path);
                 let exists = file_path(trimmed, &self.serve_from);
                 // println!("trimmed={}", trimmed);
-                println!(
+                log::trace!(
                     "mount_path=[{}], dir=[{}], exists=[{:?}]",
                     self.mount_path,
                     self.serve_from.display(),

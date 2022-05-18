@@ -1,31 +1,55 @@
-import {html, LitElement} from "lit";
+import {html, LitElement, ReactiveController, ReactiveControllerHost} from "lit";
 import {customElement} from "lit/decorators/custom-element.js";
-import {query} from "lit/decorators/query.js";
+import {inspect} from "@xstate/inspect";
+import {createMachine, interpret, Subscription} from "xstate";
 
-@customElement("bs3-app")
-class App extends LitElement {
+import "./bs3-routes";
+import "./bs3-route";
+import "./bs3-route-fallback";
+import {appMachine} from "./machines/app";
 
-  @query("form", true)
-  form: HTMLFormElement;
+inspect({iframe: false});
 
-  handleEvent(e) {
-    console.log(e);
-    e.preventDefault();
-    console.log(this.form);
-    const data = new FormData(this.form);
-    for (let [fieldName, value] of data) {
-      console.log({fieldName, value});
-    }
+export class MachineController implements ReactiveController {
+  // reference to the host element using this controller
+  host: ReactiveControllerHost & Element;
+  store;
+  subscription?: Subscription;
+
+  constructor(host: ReactiveControllerHost & Element, machine: typeof appMachine) {
+    (this.host = host).addController(this);
+    this.store = interpret(machine, {devTools: true}).start();
+    this.subscription = this.store.subscribe(() => {
+      this.host.requestUpdate();
+    });
   }
-  render() {
+
+  hostDisconnected() {
+    this.subscription?.unsubscribe();
+  }
+}
+
+
+@customElement('router-test-1')
+export class Test1 extends LitElement {
+  machine = new MachineController(this, appMachine).store;
+  get currentRoute() {
+    // @ts-ignore
+    switch (this.machine.state.context.named) {
+      case "waiting": return html`<p>Please wait...</p>`
+      case "unknown": return html`<bs3-route-fallback></bs3-route-fallback>`
+      case "routes": return html`<bs3-routes></bs3-routes>`
+      default: return html`Not sure...`
+    }
+
+  }
+  override render() {
     return html`
-    <pre><code>Submitting for: ${window.location.pathname}</code></pre>
-    <div>
-      <form @submit=${this} >
-          <label for="body"><input type="text" id="body" name="body"></label>
-          <button type="submit">Submit</button>
-      </form>
-    </div>
+      <pre><code>${JSON.stringify(this.machine.state.value)}</code></pre>
+      <pre><code>${JSON.stringify(this.machine.state.context.named)}</code></pre>
+      ${this.currentRoute}
+      <p><a href="/__bs3/api/routes">See all routes</a></p>
+      <p><a href="/shane">See an unknown route</a></p>
     `;
   }
 }

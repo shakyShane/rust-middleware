@@ -9,9 +9,10 @@ use actix_web::{web, App, HttpServer};
 
 use crate::options::Options;
 
-use crate::client::runtime::Runtime;
+use crate::client::runtime::{Runtime, TempData};
 use crate::{read_response_body, BrowserSyncMsg, MultiService, ServeStatic};
 use tokio::sync::mpsc::Sender;
+use tokio::sync::Mutex;
 
 pub fn create_server(opts: Options, sender: Sender<BrowserSyncMsg>) -> Server {
     let server = HttpServer::new(move || {
@@ -61,8 +62,12 @@ fn config(cfg: &mut web::ServiceConfig, opts: &Options, sender: Sender<BrowserSy
         items: vec![Box::new(script.clone())],
     };
 
+    let temp_data = TempData::default();
+    let temp_data_mutex = Mutex::new(temp_data);
+
     cfg.app_data(Data::new(mods));
     cfg.app_data(Data::new(sender));
+    cfg.app_data(Data::new(temp_data_mutex));
 
     runtime.configure(opts, cfg);
     script.configure(cfg);

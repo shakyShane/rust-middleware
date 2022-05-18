@@ -8,11 +8,11 @@ async fn main() -> anyhow::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     let options = <Options as Parser>::parse();
 
-    let (sender, mut rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1);
+    let (sender, mut rx) = tokio::sync::mpsc::channel::<BrowserSyncMsg>(1000);
     let (done_sender, done_receiver) = tokio::sync::oneshot::channel::<()>();
 
     //
-    // Handle messages outgoing messages here.
+    // Handle outgoing messages here.
     //
     actix_rt::spawn(async move {
         while let Some(msg) = rx.recv().await {
