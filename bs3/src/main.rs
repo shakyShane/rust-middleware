@@ -2,6 +2,10 @@ use anyhow::anyhow;
 use bs3_lib::msg::BrowserSyncMsg;
 use bs3_lib::options::Options;
 use clap::Parser;
+use std::fmt::{Debug, Display, Formatter};
+use std::fs::read_to_string;
+use std::io::Error;
+use std::path::PathBuf;
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {

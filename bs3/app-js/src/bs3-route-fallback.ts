@@ -1,5 +1,6 @@
 import {customElement} from "lit/decorators/custom-element.js";
 import {html, LitElement} from "lit";
+import invariant from "tiny-invariant";
 import {query} from "lit/decorators/query.js";
 
 @customElement("bs3-route-fallback")
@@ -10,7 +11,9 @@ class BS3RouteFallback extends LitElement {
 
   handleEvent(_e: SubmitEvent) {
     _e.preventDefault();
-    console.log(_e);
+    invariant(_e.target instanceof HTMLFormElement, "target must be a form element");
+    const d = new FormData(_e.target);
+    console.log(JSON.stringify(d));
   }
   override  render() {
     return html`
@@ -27,4 +30,11 @@ class BS3RouteFallback extends LitElement {
         </div>
     `;
   }
+}
+
+function isFormTarget(e: Event['target']): e is HTMLFormElement  {
+  if (!(e instanceof HTMLFormElement)) {
+    throw new Error('unreachable');
+  }
+  return true
 }

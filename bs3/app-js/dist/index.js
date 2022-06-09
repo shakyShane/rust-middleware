@@ -5,6 +5,7 @@
   var __getOwnPropNames = Object.getOwnPropertyNames;
   var __getProtoOf = Object.getPrototypeOf;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __commonJS = (cb, mod2) => function __require() {
     return mod2 || (0, cb[__getOwnPropNames(cb)[0]])((mod2 = { exports: {} }).exports, mod2), mod2.exports;
   };
@@ -25,6 +26,10 @@
     if (kind && result)
       __defProp(target, key, result);
     return result;
+  };
+  var __publicField = (obj, key, value) => {
+    __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+    return value;
   };
 
   // node_modules/fast-safe-stringify/index.js
@@ -1119,7 +1124,7 @@
           delay: resolvedDelay
         });
       }
-      function sendParent2(event2, options) {
+      function sendParent4(event2, options) {
         return send4(event2, _tslib.__assign(_tslib.__assign({}, options), {
           to: types.SpecialTargets.Parent
         }));
@@ -1130,7 +1135,7 @@
         }));
       }
       function sendUpdate2() {
-        return sendParent2(actionTypes.update);
+        return sendParent4(actionTypes.update);
       }
       function respond(event2, options) {
         return send4(event2, _tslib.__assign(_tslib.__assign({}, options), {
@@ -1256,7 +1261,7 @@
         }));
       }
       function escalate(errorData, options) {
-        return sendParent2(function(context, event2, meta) {
+        return sendParent4(function(context, event2, meta) {
           return {
             type: actionTypes.error,
             data: utils.isFunction(errorData) ? errorData(context, event2, meta) : errorData
@@ -1370,7 +1375,7 @@
       exports.resolveStop = resolveStop2;
       exports.respond = respond;
       exports.send = send4;
-      exports.sendParent = sendParent2;
+      exports.sendParent = sendParent4;
       exports.sendTo = sendTo;
       exports.sendUpdate = sendUpdate2;
       exports.start = start3;
@@ -2520,6 +2525,13 @@
   function isActor(value) {
     return !!value && typeof value.send === "function";
   }
+  var uniqueId = /* @__PURE__ */ function() {
+    var currentId = 0;
+    return function() {
+      currentId++;
+      return currentId.toString(16);
+    };
+  }();
   function toEventObject(event2, payload) {
     if (isString(event2) || typeof event2 === "number") {
       return __assign2({
@@ -2721,6 +2733,11 @@
       delay: resolvedDelay
     });
   }
+  function sendParent(event2, options) {
+    return send2(event2, __assign2(__assign2({}, options), {
+      to: SpecialTargets.Parent
+    }));
+  }
   var resolveLog = function(action, ctx, _event) {
     return __assign2(__assign2({}, action), {
       value: isString(action.expr) ? action.expr : action.expr(ctx, _event.data, {
@@ -2888,6 +2905,9 @@
     var result = fn(service);
     serviceStack.pop();
     return result;
+  };
+  var consume = function(fn) {
+    return fn(serviceStack[serviceStack.length - 1]);
   };
 
   // node_modules/xstate/es/Actor.js
@@ -4571,6 +4591,30 @@
     Interpreter2.interpret = interpret;
     return Interpreter2;
   }();
+  var resolveSpawnOptions = function(nameOrOptions) {
+    if (isString(nameOrOptions)) {
+      return __assign2(__assign2({}, DEFAULT_SPAWN_OPTIONS), {
+        name: nameOrOptions
+      });
+    }
+    return __assign2(__assign2(__assign2({}, DEFAULT_SPAWN_OPTIONS), {
+      name: uniqueId()
+    }), nameOrOptions);
+  };
+  function spawn(entity, nameOrOptions) {
+    var resolvedOptions = resolveSpawnOptions(nameOrOptions);
+    return consume(function(service) {
+      if (!IS_PRODUCTION) {
+        var isLazyEntity = isMachine(entity) || isFunction(entity);
+        warn(!!service || isLazyEntity, 'Attempted to spawn an Actor (ID: "'.concat(isMachine(entity) ? entity.id : "undefined", '") outside of a service. This will have no effect.'));
+      }
+      if (service) {
+        return service.spawn(entity, resolvedOptions.name, resolvedOptions);
+      } else {
+        return createDeferredActor(entity, resolvedOptions.name);
+      }
+    });
+  }
   function interpret(machine, options) {
     var interpreter = new Interpreter(machine, options);
     return interpreter;
@@ -5761,6 +5805,7 @@
   // node_modules/xstate/es/index.js
   var assign3 = assign2;
   var send3 = send2;
+  var sendParent2 = sendParent;
 
   // node_modules/@xstate/inspect/es/utils.js
   var import_fast_safe_stringify = __toESM(require_fast_safe_stringify());
@@ -6062,6 +6107,80 @@
     };
   }
 
+  // node_modules/@lit/reactive-element/decorators/property.js
+  var i3 = (i5, e5) => e5.kind === "method" && e5.descriptor && !("value" in e5.descriptor) ? { ...e5, finisher(n6) {
+    n6.createProperty(e5.key, i5);
+  } } : { kind: "field", key: Symbol(), placement: "own", descriptor: {}, originalKey: e5.key, initializer() {
+    typeof e5.initializer == "function" && (this[e5.key] = e5.initializer.call(this));
+  }, finisher(n6) {
+    n6.createProperty(e5.key, i5);
+  } };
+  function e4(e5) {
+    return (n6, t3) => t3 !== void 0 ? ((i5, e6, n7) => {
+      e6.constructor.createProperty(n7, i5);
+    })(e5, n6, t3) : i3(e5, n6);
+  }
+
+  // src/bs3-routes.ts
+  var BS3Routes = class extends s4 {
+    constructor() {
+      super(...arguments);
+      __publicField(this, "machine", null);
+    }
+    firstUpdated(_changedProperties) {
+      super.firstUpdated(_changedProperties);
+      this.www = new SubMachineController(this, this.machine);
+    }
+    render() {
+      console.log("bs3-routes render...", this.machine.state.context.counter);
+      return $`
+        list of routes here (${this.machine.state.context.counter || 0})...
+    `;
+    }
+  };
+  __decorateClass([
+    e4()
+  ], BS3Routes.prototype, "machine", 2);
+  BS3Routes = __decorateClass([
+    n5("bs3-routes")
+  ], BS3Routes);
+
+  // src/bs3-route.ts
+  var BS3Route = class extends s4 {
+    constructor() {
+      super(...arguments);
+      __publicField(this, "pathId");
+    }
+    render() {
+      return $`
+    <div>
+      <pre><code>${this.pathId}</code></pre>
+    </div>
+    `;
+    }
+  };
+  __decorateClass([
+    e4({ type: String })
+  ], BS3Route.prototype, "pathId", 2);
+  BS3Route = __decorateClass([
+    n5("bs3-route")
+  ], BS3Route);
+
+  // node_modules/tiny-invariant/dist/tiny-invariant.esm.js
+  var isProduction = false;
+  var prefix = "Invariant failed";
+  function invariant(condition, message) {
+    if (condition) {
+      return;
+    }
+    if (isProduction) {
+      throw new Error(prefix);
+    }
+    var provided = typeof message === "function" ? message() : message;
+    var value = provided ? prefix + ": " + provided : prefix;
+    throw new Error(value);
+  }
+
   // node_modules/@lit/reactive-element/decorators/base.js
   var o5 = ({ finisher: e5, descriptor: t3 }) => (o6, n6) => {
     var r4;
@@ -6078,7 +6197,7 @@
   };
 
   // node_modules/@lit/reactive-element/decorators/query.js
-  function i3(i5, n6) {
+  function i4(i5, n6) {
     return o5({ descriptor: (o6) => {
       const t3 = { get() {
         var o7, n7;
@@ -6095,57 +6214,17 @@
     } });
   }
 
-  // src/bs3-routes.ts
-  var BS3Routes = class extends s4 {
-    render() {
-      return $`
-        list of routes here...
-    `;
-    }
-  };
-  __decorateClass([
-    i3("form", true)
-  ], BS3Routes.prototype, "form", 2);
-  BS3Routes = __decorateClass([
-    n5("bs3-routes")
-  ], BS3Routes);
-
-  // node_modules/@lit/reactive-element/decorators/property.js
-  var i4 = (i5, e5) => e5.kind === "method" && e5.descriptor && !("value" in e5.descriptor) ? { ...e5, finisher(n6) {
-    n6.createProperty(e5.key, i5);
-  } } : { kind: "field", key: Symbol(), placement: "own", descriptor: {}, originalKey: e5.key, initializer() {
-    typeof e5.initializer == "function" && (this[e5.key] = e5.initializer.call(this));
-  }, finisher(n6) {
-    n6.createProperty(e5.key, i5);
-  } };
-  function e4(e5) {
-    return (n6, t3) => t3 !== void 0 ? ((i5, e6, n7) => {
-      e6.constructor.createProperty(n7, i5);
-    })(e5, n6, t3) : i4(e5, n6);
-  }
-
-  // src/bs3-route.ts
-  var BS3Route = class extends s4 {
-    render() {
-      return $`
-    <div>
-      <pre><code>${this.pathId}</code></pre>
-    </div>
-    `;
-    }
-  };
-  __decorateClass([
-    e4({ type: String })
-  ], BS3Route.prototype, "pathId", 2);
-  BS3Route = __decorateClass([
-    n5("bs3-route")
-  ], BS3Route);
-
   // src/bs3-route-fallback.ts
   var BS3RouteFallback = class extends s4 {
+    constructor() {
+      super(...arguments);
+      __publicField(this, "form");
+    }
     handleEvent(_e) {
       _e.preventDefault();
-      console.log(_e);
+      invariant(_e.target instanceof HTMLFormElement, "target must be a form element");
+      const d2 = new FormData(_e.target);
+      console.log(JSON.stringify(d2));
     }
     render() {
       return $`
@@ -6164,7 +6243,7 @@
     }
   };
   __decorateClass([
-    i3("form", true)
+    i4("form", true)
   ], BS3RouteFallback.prototype, "form", 2);
   BS3RouteFallback = __decorateClass([
     n5("bs3-route-fallback")
@@ -8912,13 +8991,122 @@
     setErrorMap
   });
 
+  // src/utils/nav-utils.ts
+  function trackLinks(goto) {
+    window.addEventListener("popstate", (e5) => {
+      goto(window.location.pathname);
+    });
+    window.addEventListener("click", (e5) => {
+      const isNonNavigationClick = e5.button !== 0 || e5.metaKey || e5.ctrlKey || e5.shiftKey;
+      if (e5.defaultPrevented || isNonNavigationClick) {
+        return;
+      }
+      const anchor = e5.composedPath().find((n6) => n6.tagName === "A");
+      if (anchor === void 0 || anchor.target !== "" || anchor.hasAttribute("download") || anchor.getAttribute("rel") === "external") {
+        return;
+      }
+      const href = anchor.href;
+      if (href === "" || href.startsWith("mailto:")) {
+        return;
+      }
+      const location = window.location;
+      if (anchor.origin !== origin) {
+        return;
+      }
+      e5.preventDefault();
+      if (href !== location.href) {
+        window.history.pushState({}, "", href);
+        goto(anchor.pathname);
+      }
+    });
+  }
+
+  // src/machines/listViewMachine.ts
+  var listViewMachine = createMachine({
+    id: "listViewMachine",
+    initial: "idle",
+    context: { data: null, counter: 0 },
+    invoke: {
+      src: () => (send4) => {
+        const int = setInterval(() => {
+          console.log("tick");
+          send4("inc");
+        }, 1e3);
+        return () => clearInterval(int);
+      }
+    },
+    entry: sendParent2({ type: "ack", id: "listViewMachine#machine-loaded" }),
+    on: {
+      inc: { actions: "inc" }
+    },
+    states: {
+      idle: {
+        invoke: {
+          src: "loader",
+          onDone: { target: "loaded", actions: "assign-data" },
+          onError: { target: "errored" }
+        }
+      },
+      loaded: {
+        entry: sendParent2({ type: "ack", id: "listViewMachine#data-loaded" })
+      },
+      errored: {}
+    },
+    exit: () => {
+      console.log("--listViewMachine");
+    }
+  }, {
+    actions: {
+      "assign-data": assign3({ data: (_ctx, evt) => evt.data }),
+      "inc": assign3({ counter: (ctx, evt) => ctx.counter + 1 })
+    },
+    services: {
+      loader: async () => {
+        await new Promise((res) => setTimeout(res, 1e3));
+        return [{ name: "shane" }, { name: "kittie" }];
+      }
+    }
+  });
+
+  // src/machines/unknownViewMachine.ts
+  var unknownViewMachine = createMachine({
+    id: "unknownViewMachine",
+    initial: "idle",
+    context: { data: null },
+    states: {
+      idle: {
+        invoke: {
+          src: "loader",
+          onDone: { target: "loaded", actions: "assign-data" },
+          onError: { target: "errored" }
+        }
+      },
+      loaded: {},
+      errored: {}
+    },
+    exit: () => {
+      console.log("--unknownViewMachine");
+    }
+  }, {
+    actions: {
+      "assign-data": assign3({ data: (_ctx, evt) => evt.data })
+    },
+    services: {
+      loader: async () => {
+        await new Promise((res) => setTimeout(res, 1e3));
+        return [{ name: "shane" }, { name: "kittie" }];
+      }
+    }
+  });
+
   // src/machines/app.ts
   var appMachine = createMachine({
     id: "app",
     initial: "initial",
     context: {
       pathname: window.location.pathname,
-      named: "waiting"
+      named: "waiting",
+      current: null
     },
     invoke: {
       id: "popstate-listener",
@@ -8938,18 +9126,27 @@
         }
       },
       settled: {
-        entry: send3("broadcast-settled"),
+        entry: "routing-settled",
         on: {
-          "navigate": { actions: "try-navigate", target: "navigating" }
+          "navigate": { actions: "try-navigate", target: "navigating" },
+          "ack": { actions: "ack-ack" }
         }
       }
     }
   }, {
     actions: {
-      "assign-route": assign3({
-        named: (_2, evt) => {
-          const parsed = navigationCompleteEvent.parse(evt);
-          return parsed.named;
+      "ack-ack": (ctx, evt) => {
+        console.log("sub-machine loaded", evt);
+      },
+      "routing-settled": assign3({
+        current: (ctx) => {
+          ctx.current?.stop?.();
+          switch (ctx.named) {
+            case "routes":
+              return spawn(listViewMachine);
+            default:
+              return spawn(unknownViewMachine);
+          }
         }
       }),
       "initial-route-resolution": (0, import_actions5.pure)((ctx, evt) => {
@@ -8968,6 +9165,12 @@
         }
         return [];
       }),
+      "assign-route": assign3({
+        named: (_2, evt) => {
+          const parsed = navigationCompleteEvent.parse(evt);
+          return parsed.named;
+        }
+      }),
       "try-navigate": (0, import_actions5.pure)((ctx, evt) => {
         const parsed = navEvent.parse(evt);
         switch (parsed.named) {
@@ -8976,7 +9179,7 @@
             return send3(createNavigationCompleteEvent({ type: "navigation-complete", named: parsed.named }));
           }
           default:
-            "unsupported";
+            throw new Error("unsupported route" + parsed);
         }
         return [];
       })
@@ -8997,36 +9200,14 @@
             }));
           }
         };
-        window.addEventListener("popstate", (e5) => {
-          goto(window.location.pathname);
-        });
-        window.addEventListener("click", (e5) => {
-          const isNonNavigationClick = e5.button !== 0 || e5.metaKey || e5.ctrlKey || e5.shiftKey;
-          if (e5.defaultPrevented || isNonNavigationClick) {
-            return;
-          }
-          const anchor = e5.composedPath().find((n6) => n6.tagName === "A");
-          if (anchor === void 0 || anchor.target !== "" || anchor.hasAttribute("download") || anchor.getAttribute("rel") === "external") {
-            return;
-          }
-          const href = anchor.href;
-          if (href === "" || href.startsWith("mailto:")) {
-            return;
-          }
-          const location = window.location;
-          if (anchor.origin !== origin) {
-            return;
-          }
-          e5.preventDefault();
-          if (href !== location.href) {
-            window.history.pushState({}, "", href);
-            goto(anchor.pathname);
-          }
-        });
+        trackLinks(goto);
       }
     }
   });
-  var namedRoutes = mod.union([mod.literal("unknown"), mod.literal("routes")]);
+  var namedRoutes = mod.union([
+    mod.literal("unknown"),
+    mod.literal("routes")
+  ]);
   var navEvent = mod.object({
     type: mod.literal("navigate"),
     named: namedRoutes
@@ -9046,6 +9227,9 @@
   inspect({ iframe: false });
   var MachineController = class {
     constructor(host, machine) {
+      __publicField(this, "host");
+      __publicField(this, "store");
+      __publicField(this, "subscription");
       (this.host = host).addController(this);
       this.store = interpret(machine, { devTools: true }).start();
       this.subscription = this.store.subscribe(() => {
@@ -9056,24 +9240,40 @@
       this.subscription?.unsubscribe();
     }
   };
+  var SubMachineController = class {
+    constructor(host, store) {
+      __publicField(this, "host");
+      __publicField(this, "subscription");
+      (this.host = host).addController(this);
+      this.subscription = store.subscribe(() => {
+        this.host.requestUpdate();
+      });
+    }
+    hostDisconnected() {
+      this.subscription?.unsubscribe();
+    }
+  };
   var Test1 = class extends s4 {
     constructor() {
       super(...arguments);
-      this.machine = new MachineController(this, appMachine).store;
+      __publicField(this, "machine", new MachineController(this, appMachine).store);
     }
     get currentRoute() {
+      console.log(this.machine.state.context.current);
       switch (this.machine.state.context.named) {
         case "waiting":
           return $`<p>Please wait...</p>`;
         case "unknown":
           return $`<bs3-route-fallback></bs3-route-fallback>`;
-        case "routes":
-          return $`<bs3-routes></bs3-routes>`;
+        case "routes": {
+          return $`<bs3-routes .machine=${this.machine.state.context.current}></bs3-routes>`;
+        }
         default:
           return $`Not sure...`;
       }
     }
     render() {
+      console.log("render...");
       return $`
       <pre><code>${JSON.stringify(this.machine.state.value)}</code></pre>
       <pre><code>${JSON.stringify(this.machine.state.context.named)}</code></pre>

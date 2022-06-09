@@ -1,13 +1,17 @@
-import {assign, createMachine, send} from "xstate";
+import {ActorRef, assign, createMachine, send, spawn} from "xstate";
 import {pure} from "xstate/lib/actions";
 import z from "zod";
+import {trackLinks} from "../utils/nav-utils";
+import {listViewMachine} from "./listViewMachine";
+import {unknownViewMachine} from "./unknownViewMachine";
 
 export const appMachine = createMachine({
   id: "app",
   initial: 'initial',
   context: {
     pathname: window.location.pathname,
-    named: 'waiting'
+    named: 'waiting',
+    current: null as ActorRef<any> | null,
   },
   invoke: {
     id: "popstate-listener",
@@ -22,23 +26,30 @@ export const appMachine = createMachine({
     },
     navigating: {
       on: {
-        'navigation-complete': {actions: 'assign-route', target: 'settled'},
-        'navigate': {actions: 'try-navigate', target: 'navigating'}
+        'navigation-complete': { actions: 'assign-route', target: 'settled' },
+        'navigate': { actions: 'try-navigate', target: 'navigating' }
       }
     },
     settled: {
-      entry: send('broadcast-settled'),
+      entry: 'routing-settled',
       on: {
-        'navigate': {actions: 'try-navigate', target: 'navigating'}
+        'navigate': { actions: 'try-navigate', target: 'navigating' },
+        'ack': { actions: 'ack-ack' }
       }
     }
   }
 }, {
   actions: {
-    'assign-route': assign({
-      named: (_, evt) => {
-        const parsed = navigationCompleteEvent.parse(evt);
-        return parsed.named;
+    'ack-ack': (ctx, evt) => {
+      console.log('sub-machine loaded', evt);
+    },
+    'routing-settled': assign({
+      current: (ctx) => {
+        ctx.current?.stop?.();
+        switch (ctx.named) {
+          case "routes": return spawn(listViewMachine)
+          default: return spawn(unknownViewMachine)
+        }
       }
     }),
     'initial-route-resolution': pure((ctx, evt) => {
@@ -57,6 +68,12 @@ export const appMachine = createMachine({
       }
       return [];
     }),
+    'assign-route': assign({
+      named: (_, evt) => {
+        const parsed = navigationCompleteEvent.parse(evt);
+        return parsed.named;
+      }
+    }),
     'try-navigate': pure((ctx, evt) => {
       const parsed = navEvent.parse(evt);
       switch (parsed.named) {
@@ -64,8 +81,7 @@ export const appMachine = createMachine({
         case "routes": {
           return send(createNavigationCompleteEvent({type: "navigation-complete", named: parsed.named}))
         }
-        default:
-          "unsupported"
+        default: throw new Error("unsupported route" + parsed)
       }
       return []
     })
@@ -85,52 +101,17 @@ export const appMachine = createMachine({
             named: 'unknown'
           }))
         }
-      }
-      window.addEventListener('popstate', (e) => {
-        goto(window.location.pathname);
-      })
-      window.addEventListener('click', (e: MouseEvent) => {
-        const isNonNavigationClick =
-          e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey;
-        if (e.defaultPrevented || isNonNavigationClick) {
-          return;
-        }
-
-        const anchor = e
-          .composedPath()
-          .find((n) => (n as HTMLElement).tagName === 'A') as
-          | HTMLAnchorElement
-          | undefined;
-        if (
-          anchor === undefined ||
-          anchor.target !== '' ||
-          anchor.hasAttribute('download') ||
-          anchor.getAttribute('rel') === 'external'
-        ) {
-          return;
-        }
-
-        const href = anchor.href;
-        if (href === '' || href.startsWith('mailto:')) {
-          return;
-        }
-
-        const location = window.location;
-        if (anchor.origin !== origin) {
-          return;
-        }
-
-        e.preventDefault();
-        if (href !== location.href) {
-          window.history.pushState({}, '', href);
-          goto(anchor.pathname)
-        }
-      })
+      };
+      trackLinks(goto);
     }
   }
 })
 
-const namedRoutes = z.union([z.literal("unknown"), z.literal("routes")]);
+const namedRoutes = z.union([
+  z.literal("unknown"),
+  z.literal("routes")
+]);
+
 const navEvent = z.object({
   type: z.literal("navigate"),
   named: namedRoutes,
